@@ -18,7 +18,7 @@ The script was built to provide a guided and logged workflow for environments th
 - offline environments using pre-staged modules
 - Veeam Backup & Replication v12.x and v13.x validation scenarios
 
-## 🔗 Relationship with AsBuiltReport Project
+## Relationship with AsBuiltReport Project
 
 This project does **not replace or modify** the official AsBuiltReport modules.
 
