@@ -88,7 +88,7 @@ If PowerShell 7 is not installed, download and install it before using environme
 Run the script with administrative privileges:
 
 ```powershell
-.\vbr_asbuilt_v19_FULL.ps1
+.\vbr_asbuilt.ps1
 ```
 
 ### Workflow Summary
