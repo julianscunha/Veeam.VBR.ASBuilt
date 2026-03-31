@@ -249,6 +249,54 @@ FinalStatus: FAILED
 4. Push the branch
 5. Open a pull request
 
+## 📚 References
+
+This project relies on the official AsBuiltReport ecosystem and related PowerShell modules.
+
+### Official AsBuiltReport Project
+
+- AsBuiltReport Organization  
+  https://github.com/AsBuiltReport
+
+### Core Framework
+
+- AsBuiltReport.Core  
+  https://github.com/AsBuiltReport/AsBuiltReport.Core
+
+### Veeam Report Module
+
+- AsBuiltReport.Veeam.VBR  
+  https://github.com/AsBuiltReport/AsBuiltReport.Veeam.VBR
+
+### PowerShell Gallery
+
+Modules are distributed via PSGallery:
+
+- https://www.powershellgallery.com/packages/AsBuiltReport.Core  
+- https://www.powershellgallery.com/packages/AsBuiltReport.Veeam.VBR  
+
+### Veeam Documentation
+
+- Official Veeam Documentation  
+  https://helpcenter.veeam.com/docs/backup/vsphere/
+
+## 🧾 Attribution
+
+This repository is an **independent automation layer** built on top of the AsBuiltReport ecosystem.
+
+- All report generation logic belongs to the AsBuiltReport Project contributors
+- This project does not modify or redistribute internal report logic
+- It provides validation, orchestration and execution improvements
+
+## ⚖️ Disclaimer
+
+This project is not affiliated with or officially endorsed by:
+
+- AsBuiltReport Project  
+- Veeam Software  
+
+All trademarks and product names are the property of their respective owners.
+
 ## License
 
 MIT — see the LICENSE file
