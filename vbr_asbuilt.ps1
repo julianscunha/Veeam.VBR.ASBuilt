@@ -1,3 +1,34 @@
+﻿<#
+.SYNOPSIS
+Automates deployment, validation and execution of AsBuiltReport for Veeam Backup & Replication.
+
+.DESCRIPTION
+This script validates the environment, installs required modules (online or offline),
+handles PowerShell compatibility (5.1 and 7+), connects to Veeam Backup & Replication,
+generates configuration files and executes the AsBuiltReport.
+
+Includes:
+- Environment validation
+- Online/offline module handling
+- PowerShell relaunch logic
+- Veeam connectivity and version detection
+- Execution summary and structured logging
+
+.NOTES
+Author  : Juliano Cunha
+GitHub  : https://github.com/julianscunha
+Version : 1.0.0
+Date    : 2026-03-31
+
+.REQUIREMENTS
+- Windows PowerShell 5.1 or PowerShell 7+
+- Veeam Backup & Replication installed
+- Administrative privileges
+
+.LICENSE
+MIT License
+#>
+
 ﻿# ==============================
 # AsBuiltReport Veeam - FINAL v19
 # Online/Offline module handling + NuGet validation
