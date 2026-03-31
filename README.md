@@ -251,31 +251,7 @@ FinalStatus: FAILED
 
 ## License
 
-MIT — see the LICENSE file.
-
-## How It Works (diagram)
-
-```mermaid
-graph TD;
-    A[Start Script] --> B[Validate PowerShell];
-    B --> C[Check Internet];
-    C --> D[Validate NuGet and PSGallery];
-    D --> E[Validate Modules];
-    E --> F{Modules Available?};
-    F -->|No| G[Install Online or Offline];
-    F -->|Yes| H[Load Veeam PowerShell];
-    G --> H;
-    H --> I{Needs PowerShell 7?};
-    I -->|Yes| J[Relaunch in PowerShell 7];
-    I -->|No| K[Connect to VBR];
-    J --> K;
-    K --> L[Validate Veeam Version];
-    L --> M[Generate Report Config];
-    M --> N[Run AsBuiltReport];
-    N --> O[Write Final Summary];
-```
-
-## Author
+MIT — see the LICENSE file
 
 Juliano Cunha  
 GitHub: https://github.com/julianscunha
