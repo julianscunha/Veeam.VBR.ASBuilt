@@ -11,6 +11,8 @@
 
 Veeam AsBuilt Automated Deployment & Validation is a PowerShell automation script designed to validate the local environment, install or validate all required AsBuiltReport dependencies, handle online and offline module workflows, connect to Veeam Backup & Replication, generate the required report configuration file, and execute the Veeam AsBuilt report.
 
+This project acts as a **wrapper and orchestration layer** for the official AsBuiltReport ecosystem, improving reliability, validation and execution experience in real-world environments.
+
 The script was built to provide a guided and logged workflow for environments that may run in:
 - Windows PowerShell 5.1
 - PowerShell 7+
