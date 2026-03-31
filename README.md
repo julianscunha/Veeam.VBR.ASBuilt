@@ -252,6 +252,3 @@ FinalStatus: FAILED
 ## License
 
 MIT — see the LICENSE file
-
-Juliano Cunha  
-GitHub: https://github.com/julianscunha
