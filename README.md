@@ -251,7 +251,7 @@ FinalStatus: FAILED
 4. Push the branch
 5. Open a pull request
 
-## 📚 References
+## References
 
 This project relies on the official AsBuiltReport ecosystem and related PowerShell modules.
 
@@ -282,7 +282,7 @@ Modules are distributed via PSGallery:
 - Official Veeam Documentation  
   https://helpcenter.veeam.com/docs/backup/vsphere/
 
-## 🧾 Attribution
+## Attribution
 
 This repository is an **independent automation layer** built on top of the AsBuiltReport ecosystem.
 
@@ -290,7 +290,7 @@ This repository is an **independent automation layer** built on top of the AsBui
 - This project does not modify or redistribute internal report logic
 - It provides validation, orchestration and execution improvements
 
-## ⚖️ Disclaimer
+## Disclaimer
 
 This project is not affiliated with or officially endorsed by:
 
