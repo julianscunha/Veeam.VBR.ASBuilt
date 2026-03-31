@@ -29,12 +29,6 @@ Date    : 2026-03-31
 MIT License
 #>
 
-﻿# ==============================
-# AsBuiltReport Veeam - FINAL v19
-# Online/Offline module handling + NuGet validation
-# Console reduzida | Log completo | Resumo final
-# ==============================
-
 param(
     [int]$relaunched = 0,
     [string]$VBRServer = "localhost"
