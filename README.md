@@ -71,8 +71,8 @@ This script was designed to:
 Clone the repository or download the script:
 
 ```powershell
-git clone https://github.com/julianscunha/Veeam.AsBuilt.Automated.Deployment.git
-cd Veeam.AsBuilt.Automated.Deployment
+git clone https://github.com/julianscunha/Veeam.VBR.ASBuilt.git
+cd Veeam.VBR.ASBuilt
 ```
 
 If required, allow local script execution:
