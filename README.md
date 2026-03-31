@@ -18,6 +18,30 @@ The script was built to provide a guided and logged workflow for environments th
 - offline environments using pre-staged modules
 - Veeam Backup & Replication v12.x and v13.x validation scenarios
 
+## 🔗 Relationship with AsBuiltReport Project
+
+This project does **not replace or modify** the official AsBuiltReport modules.
+
+Instead, it acts as a **validation, orchestration and execution wrapper** around the original project.
+
+### Purpose of this repository
+
+This script was designed to:
+
+- Validate environment prerequisites before execution
+- Automate module installation (online and offline)
+- Handle PowerShell compatibility scenarios (5.1 vs 7+)
+- Ensure correct loading of Veeam PowerShell components
+- Provide structured logging and execution summary
+- Improve user experience and troubleshooting
+
+### Important Notes
+
+- The actual report generation logic is **fully handled by the official AsBuiltReport modules**
+- This repository **does not contain or modify report templates or internal logic**
+- All credits for report generation belong to the original AsBuiltReport contributors
+- This script only **facilitates and standardizes execution in real-world environments**
+
 ## Key Features
 
 - Automated environment validation before report execution
