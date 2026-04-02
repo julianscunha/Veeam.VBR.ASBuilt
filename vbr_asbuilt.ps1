@@ -364,136 +364,110 @@ function Show-OfflineModuleInstructions {
     Write-Log "Depois de copiar a pasta modules ao lado do script, reexecute este mesmo arquivo." "INFO" 1
 }
 
-function Test-And-LoadModule {
+function Ensure-AllModulesPresent {
     param(
-        [Parameter(Mandatory)][hashtable]$ModuleDefinition,
+        [Parameter(Mandatory)][array]$ModuleDefinitions,
         [Parameter(Mandatory)][bool]$InternetAvailable,
         [Parameter(Mandatory)][bool]$OnlineInstallEnabled,
-        [Parameter(Mandatory)][string]$OfflineRoot,
-        [Parameter(Mandatory)][array]$AllModules
+        [Parameter(Mandatory)][string]$OfflineRoot
     )
 
-    $name = $ModuleDefinition.Name
-    $requiredVersion = [version]$ModuleDefinition.RequiredVersion
-    $requiredCommands = $ModuleDefinition.RequiredCommands
-    $minimumPSEdition = if ($ModuleDefinition.ContainsKey("MinimumPSEdition")) { $ModuleDefinition.MinimumPSEdition } else { "Any" }
+    foreach ($moduleDef in $ModuleDefinitions) {
+        $name = $moduleDef.Name
+        $requiredVersion = [version]$moduleDef.RequiredVersion
 
-    Write-Log ("Validando módulo {0}" -f $name) "INFO" 1
+        Write-Log ("Validando presença do módulo {0}" -f $name) "INFO" 1
 
-    $available = Get-LatestAvailableModule -Name $name
-    if ($available) {
-        Write-Log ("Encontrado localmente: v{0}" -f $available.Version) "SUCCESS" 2
-        Write-Log ("Origem: {0}" -f $available.Path) "DEBUG" 2
-
-        if ([version]$available.Version -lt $requiredVersion) {
-            Write-Log ("Versão local abaixo do mínimo esperado ({0})" -f $requiredVersion) "WARNING" 2
-            $available = $null
+        $available = Get-LatestAvailableModule -Name $name
+        if ($available -and ([version]$available.Version -ge $requiredVersion)) {
+            Write-Log ("Módulo já disponível: {0} v{1}" -f $name, $available.Version) "SUCCESS" 2
+            continue
         }
-    }
-    else {
-        Write-Log "Módulo não encontrado localmente" "WARNING" 2
-    }
 
-    if (-not $available) {
+        if ($available) {
+            Write-Log ("Versão local insuficiente para {0}. Encontrado: {1} | Requerido: {2}" -f $name, $available.Version, $requiredVersion) "WARNING" 2
+        }
+        else {
+            Write-Log ("Módulo {0} não encontrado localmente" -f $name) "WARNING" 2
+        }
+
         if ($InternetAvailable -and $OnlineInstallEnabled) {
-            Write-Log "Tentando instalação online..." "INFO" 2
-
+            Write-Log ("Tentando instalação online de {0}..." -f $name) "INFO" 2
             try {
                 Install-Module -Name $name -RequiredVersion $requiredVersion -Force -Scope CurrentUser -AllowClobber -ErrorAction Stop
-                Write-Log ("Tentativa de instalação online concluída para {0} v{1}" -f $name, $requiredVersion) "INFO" 2
+                Write-Log ("Instalação online concluída para {0} v{1}" -f $name, $requiredVersion) "SUCCESS" 2
             }
             catch {
                 Write-Log ("Falha na instalação online de {0}: {1}" -f $name, $_.Exception.Message) "ERROR" 2
             }
-
-            $available = Get-LatestAvailableModule -Name $name
-
-            if (-not $available) {
-                Write-Log ("O módulo {0} v{1} não ficou disponível após a tentativa online" -f $name, $requiredVersion) "ERROR" 2
-
-                if (Test-Path (Join-Path $OfflineRoot $name)) {
-                    Write-Log "Pacote offline detectado. Tentando instalação offline..." "INFO" 2
-
-                    $offlineTargetVersionPath = Install-ModuleOfflineFromFolder -Name $name -RequiredVersion $requiredVersion -OfflineRoot $OfflineRoot
-                    if (-not $offlineTargetVersionPath) {
-                        Show-OfflineModuleInstructions -ModuleName $name -OfflineRoot $OfflineRoot -AllModules $AllModules
-                        return $false
-                    }
-
-                    $available = Get-Module -ListAvailable -Name $name |
-                        Sort-Object Version -Descending |
-                        Select-Object -First 1
-                }
-                else {
-                    Show-OfflineModuleInstructions -ModuleName $name -OfflineRoot $OfflineRoot -AllModules $AllModules
-                    return $false
-                }
-            }
         }
-        else {
-            Write-Log "Sem internet ou instalação online desabilitada. Tentando instalação offline..." "INFO" 2
 
+        $available = Get-LatestAvailableModule -Name $name
+        if (-not ($available -and ([version]$available.Version -ge $requiredVersion))) {
+            Write-Log ("Tentando instalação offline de {0}..." -f $name) "INFO" 2
             $offlineTargetVersionPath = Install-ModuleOfflineFromFolder -Name $name -RequiredVersion $requiredVersion -OfflineRoot $OfflineRoot
             if (-not $offlineTargetVersionPath) {
-                Show-OfflineModuleInstructions -ModuleName $name -OfflineRoot $OfflineRoot -AllModules $AllModules
+                Show-OfflineModuleInstructions -ModuleName $name -OfflineRoot $OfflineRoot -AllModules $ModuleDefinitions
                 return $false
             }
-
-            $available = Get-Module -ListAvailable -Name $name |
-                Sort-Object Version -Descending |
-                Select-Object -First 1
-
-            if (-not $available) {
-                Write-Log ("Módulo {0} não foi localizado após a instalação offline." -f $name) "ERROR" 2
-                return $false
-            }
-
-            Write-Log ("Módulo localizado após instalação: {0}" -f $available.Path) "DEBUG" 2
         }
+
+        $validated = Get-LatestAvailableModule -Name $name
+        if (-not $validated) {
+            Write-Log ("Módulo {0} não foi localizado após instalação." -f $name) "ERROR" 2
+            return $false
+        }
+
+        if ([version]$validated.Version -lt $requiredVersion) {
+            Write-Log ("Validação de versão falhou para {0}. Requerido: >= {1}. Encontrado: {2}" -f $name, $requiredVersion, $validated.Version) "ERROR" 2
+            return $false
+        }
+
+        Write-Log ("Presença validada para {0}: v{1}" -f $name, $validated.Version) "SUCCESS" 2
+        Write-Log ("Origem validada: {0}" -f $validated.Path) "DEBUG" 2
     }
 
-    $validatedModule = Get-Module -ListAvailable -Name $name |
-        Sort-Object Version -Descending |
-        Select-Object -First 1
+    return $true
+}
 
-    if (-not $validatedModule) {
-        Write-Log ("Módulo {0} não foi localizado após a instalação." -f $name) "ERROR" 2
-        return $false
+function Import-ModuleInControlledOrder {
+    param(
+        [Parameter(Mandatory)][array]$ModuleDefinitions
+    )
+
+    foreach ($moduleDef in $ModuleDefinitions) {
+        $name = $moduleDef.Name
+        $requiredCommands = $moduleDef.RequiredCommands
+        $minimumPSEdition = if ($moduleDef.ContainsKey("MinimumPSEdition")) { $moduleDef.MinimumPSEdition } else { "Any" }
+
+        Write-Log ("Importando módulo {0}" -f $name) "INFO" 1
+
+        if ($minimumPSEdition -eq "DesktopOnly" -and $PSEdition -ne "Desktop") {
+            Write-Log ("Importação do módulo {0} será ignorada na sessão atual porque ele requer Windows PowerShell (Desktop)." -f $name) "WARNING" 2
+            continue
+        }
+
+        try {
+            Import-Module -Name $name -Force -DisableNameChecking -WarningAction SilentlyContinue -ErrorAction Stop
+            Write-Log ("Importação concluída para {0}" -f $name) "SUCCESS" 2
+        }
+        catch {
+            Write-Log ("Falha ao importar {0}: {1}" -f $name, $_.Exception.Message) "ERROR" 2
+            return $false
+        }
+
+        if (-not (Ensure-ModuleImported -Name $name -RequiredCommands $requiredCommands)) {
+            Write-Log ("Módulo {0} não passou na validação final de sessão/cmdlets" -f $name) "ERROR" 2
+            return $false
+        }
+
+        foreach ($cmd in $requiredCommands) {
+            Write-Log ("Cmdlet validado: {0}" -f $cmd) "SUCCESS" 2
+        }
+
+        Write-Log ("Módulo {0} validado com sucesso" -f $name) "SUCCESS" 2
     }
 
-    Write-Log ("Módulo localizado para validação: {0}" -f $validatedModule.Path) "DEBUG" 2
-
-    if ([version]$validatedModule.Version -lt $requiredVersion) {
-        Write-Log ("Validação de versão falhou para {0}. Requerido: >= {1}. Encontrado: {2}" -f $name, $requiredVersion, $validatedModule.Version) "ERROR" 2
-        return $false
-    }
-
-    Write-Log ("Versão validada para {0}: v{1}" -f $name, $validatedModule.Version) "SUCCESS" 2
-
-    if ($minimumPSEdition -eq "DesktopOnly" -and $PSEdition -ne "Desktop") {
-        Write-Log ("Importação do módulo {0} será ignorada na sessão atual porque ele requer Windows PowerShell (Desktop)." -f $name) "WARNING" 2
-        return $true
-    }
-
-    try {
-        Import-Module -Name $name -Force -DisableNameChecking -WarningAction SilentlyContinue -ErrorAction Stop
-        Write-Log ("Importação concluída para {0}" -f $name) "SUCCESS" 2
-    }
-    catch {
-        Write-Log ("Falha ao importar {0}: {1}" -f $name, $_.Exception.Message) "ERROR" 2
-        return $false
-    }
-
-    if (-not (Ensure-ModuleImported -Name $name -RequiredCommands $requiredCommands)) {
-        Write-Log ("Módulo {0} não passou na validação final de sessão/cmdlets" -f $name) "ERROR" 2
-        return $false
-    }
-
-    foreach ($cmd in $requiredCommands) {
-        Write-Log ("Cmdlet validado: {0}" -f $cmd) "SUCCESS" 2
-    }
-
-    Write-Log ("Módulo {0} validado com sucesso" -f $name) "SUCCESS" 2
     return $true
 }
 
@@ -533,14 +507,24 @@ function Ensure-ReportConfigFile {
 
 Write-Section "INÍCIO DA EXECUÇÃO"
 
-$ModuleBaseline = @(
-    @{ Name = "AsBuiltReport.Core";      RequiredVersion = "1.6.2";     RequiredCommands = @("New-AsBuiltReport", "New-AsBuiltReportConfig") },
-    @{ Name = "AsBuiltReport.Veeam.VBR"; RequiredVersion = "0.8.26";    RequiredCommands = @() },
+$ModulePresenceBaseline = @(
     @{ Name = "PScribo";                 RequiredVersion = "0.11.1";    RequiredCommands = @() },
     @{ Name = "PScriboCharts";           RequiredVersion = "0.9.0";     RequiredCommands = @() },
     @{ Name = "PSGraph";                 RequiredVersion = "2.1.38.27"; RequiredCommands = @() },
     @{ Name = "Diagrammer.Core";         RequiredVersion = "0.2.39";    RequiredCommands = @() },
-    @{ Name = "Veeam.Diagrammer";        RequiredVersion = "0.6.34";    RequiredCommands = @(); MinimumPSEdition = "DesktopOnly" }
+    @{ Name = "Veeam.Diagrammer";        RequiredVersion = "0.6.34";    RequiredCommands = @(); MinimumPSEdition = "DesktopOnly" },
+    @{ Name = "AsBuiltReport.Core";      RequiredVersion = "1.6.2";     RequiredCommands = @("New-AsBuiltReport", "New-AsBuiltReportConfig") },
+    @{ Name = "AsBuiltReport.Veeam.VBR"; RequiredVersion = "0.8.26";    RequiredCommands = @() }
+)
+
+$ModuleImportOrder = @(
+    @{ Name = "PScribo";                 RequiredVersion = "0.11.1";    RequiredCommands = @() },
+    @{ Name = "PScriboCharts";           RequiredVersion = "0.9.0";     RequiredCommands = @() },
+    @{ Name = "PSGraph";                 RequiredVersion = "2.1.38.27"; RequiredCommands = @() },
+    @{ Name = "Diagrammer.Core";         RequiredVersion = "0.2.39";    RequiredCommands = @() },
+    @{ Name = "Veeam.Diagrammer";        RequiredVersion = "0.6.34";    RequiredCommands = @(); MinimumPSEdition = "DesktopOnly" },
+    @{ Name = "AsBuiltReport.Core";      RequiredVersion = "1.6.2";     RequiredCommands = @("New-AsBuiltReport", "New-AsBuiltReportConfig") },
+    @{ Name = "AsBuiltReport.Veeam.VBR"; RequiredVersion = "0.8.26";    RequiredCommands = @() }
 )
 
 Write-Log "Validação do PowerShell" "INFO" 0
@@ -568,19 +552,22 @@ else {
     Update-Summary -Key "NuGetGallery" -Value "SKIPPED"
 }
 
-Write-Log "Validação de módulos AsBuilt" "INFO" 0
+Write-Log "Validação de presença dos módulos AsBuilt" "INFO" 0
 
-foreach ($moduleDef in $ModuleBaseline) {
-    $ok = Test-And-LoadModule `
-        -ModuleDefinition $moduleDef `
-        -InternetAvailable $internetAvailable `
-        -OnlineInstallEnabled $onlineInstallEnabled `
-        -OfflineRoot $offlineModulesRoot `
-        -AllModules $ModuleBaseline
+$presenceOk = Ensure-AllModulesPresent `
+    -ModuleDefinitions $ModulePresenceBaseline `
+    -InternetAvailable $internetAvailable `
+    -OnlineInstallEnabled $onlineInstallEnabled `
+    -OfflineRoot $offlineModulesRoot
 
-    if (-not $ok) {
-        Stop-WithFailure -SummaryKey "Modules" -Message ("Validação do módulo {0} falhou. Encerrando execução." -f $moduleDef.Name)
-    }
+if (-not $presenceOk) {
+    Stop-WithFailure -SummaryKey "Modules" -Message "Falha na validação ou instalação dos módulos necessários."
+}
+
+Write-Log "Importação controlada de módulos AsBuilt" "INFO" 0
+$importOk = Import-ModuleInControlledOrder -ModuleDefinitions $ModuleImportOrder
+if (-not $importOk) {
+    Stop-WithFailure -SummaryKey "Modules" -Message "Falha na importação controlada dos módulos necessários."
 }
 Update-Summary -Key "Modules" -Value "OK"
 
