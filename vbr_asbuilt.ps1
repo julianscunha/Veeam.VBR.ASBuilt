@@ -18,7 +18,7 @@ Includes:
 Author  : Juliano Cunha
 GitHub  : https://github.com/julianscunha
 Version : 1.0.0
-Date    : 2026-03-31
+Date    : 2026-04-02
 
 .REQUIREMENTS
 - Windows PowerShell 5.1 or PowerShell 7+
@@ -36,9 +36,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# ------------------------------
-# ENCODING / CONSOLE
-# ------------------------------
 try {
     if ($PSVersionTable.PSVersion.Major -ge 7) {
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -58,17 +55,11 @@ catch {
 
 Clear-Host
 
-# ------------------------------
-# PATHS
-# ------------------------------
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $logFile = Join-Path $ScriptRoot "AsBuiltReport_Veeam.log"
 $offlineModulesRoot = Join-Path $ScriptRoot "modules"
 $defaultReportOutput = Join-Path $ScriptRoot "report"
 
-# ------------------------------
-# EXECUTION STATUS
-# ------------------------------
 $ExecutionSummary = [ordered]@{
     PowerShell              = "PENDING"
     Connectivity            = "PENDING"
@@ -83,28 +74,18 @@ $ExecutionSummary = [ordered]@{
     FinalMessage            = ""
 }
 
-# ------------------------------
-# LOG CONTROL
-# ------------------------------
 if ($relaunched -eq 0) {
     if (Test-Path $logFile) {
         Remove-Item $logFile -Force -ErrorAction SilentlyContinue
     }
 }
 
-# ------------------------------
-# LOG SETTINGS
-# ------------------------------
 $ConsoleVisibleLevels = @("INFO", "WARNING", "ERROR")
 
 function Write-Log {
     param(
-        [Parameter(Mandatory)]
-        [string]$Message,
-
-        [ValidateSet("INFO","SUCCESS","WARNING","ERROR","DEBUG")]
-        [string]$Level = "INFO",
-
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet("INFO","SUCCESS","WARNING","ERROR","DEBUG")][string]$Level = "INFO",
         [int]$Indent = 0
     )
 
@@ -154,16 +135,8 @@ function Write-FinalSummary {
     Write-Section "RESUMO FINAL"
 
     $items = @(
-        "PowerShell",
-        "Connectivity",
-        "NuGetGallery",
-        "Modules",
-        "VeeamPowerShell",
-        "VeeamConnection",
-        "VeeamVersion",
-        "ReportConfig",
-        "ReportExecution",
-        "FinalStatus"
+        "PowerShell","Connectivity","NuGetGallery","Modules","VeeamPowerShell",
+        "VeeamConnection","VeeamVersion","ReportConfig","ReportExecution","FinalStatus"
     )
 
     foreach ($item in $items) {
@@ -201,10 +174,7 @@ function Stop-WithFailure {
 }
 
 function Test-InternetConnectivity {
-    $targets = @(
-        "https://www.powershellgallery.com",
-        "https://www.microsoft.com"
-    )
+    $targets = @("https://www.powershellgallery.com","https://www.microsoft.com")
 
     foreach ($target in $targets) {
         try {
@@ -226,20 +196,6 @@ function Get-LatestAvailableModule {
         Select-Object -First 1
 }
 
-function Test-ModuleVersion {
-    param(
-        [Parameter(Mandatory)][string]$ModuleName,
-        [Parameter(Mandatory)][version]$RequiredVersion
-    )
-
-    $available = Get-LatestAvailableModule -Name $ModuleName
-    if (-not $available) {
-        return $false
-    }
-
-    return ([version]$available.Version -ge $RequiredVersion)
-}
-
 function Ensure-ModuleImported {
     param(
         [Parameter(Mandatory)][string]$Name,
@@ -247,9 +203,7 @@ function Ensure-ModuleImported {
     )
 
     $loaded = Get-Module -Name $Name
-    if (-not $loaded) {
-        return $false
-    }
+    if (-not $loaded) { return $false }
 
     foreach ($cmd in $RequiredCommands) {
         if (-not (Get-Command -Name $cmd -ErrorAction SilentlyContinue)) {
@@ -258,6 +212,31 @@ function Ensure-ModuleImported {
     }
 
     return $true
+}
+
+function Get-PreferredUserModulePath {
+    $modulePaths = $env:PSModulePath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+    Write-Log "PSModulePath detectado para seleção do destino de módulos:" "DEBUG" 2
+    foreach ($path in $modulePaths) {
+        Write-Log $path "DEBUG" 3
+    }
+
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        $preferred = $modulePaths | Where-Object {
+            $_ -match '[\\\/](Documents|Documentos)[\\\/]PowerShell[\\\/]Modules$'
+        } | Select-Object -First 1
+
+        if ($preferred) { return $preferred }
+    }
+
+    $preferred = $modulePaths | Where-Object {
+        $_ -match '[\\\/](Documents|Documentos)[\\\/]WindowsPowerShell[\\\/]Modules$'
+    } | Select-Object -First 1
+
+    if ($preferred) { return $preferred }
+
+    return $null
 }
 
 function Validate-NuGetAndGallery {
@@ -272,9 +251,7 @@ function Validate-NuGetAndGallery {
             Write-Log "NuGet provider ausente. Tentando instalar..." "WARNING" 2
             Install-PackageProvider -Name NuGet -Force -Scope CurrentUser -ErrorAction Stop | Out-Null
             $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
-            if (-not $nuget) {
-                throw "NuGet provider não ficou disponível após a tentativa de instalação."
-            }
+            if (-not $nuget) { throw "NuGet provider não ficou disponível após a tentativa de instalação." }
             Write-Log ("NuGet provider instalado: v{0}" -f $nuget.Version) "SUCCESS" 2
         }
 
@@ -290,9 +267,7 @@ function Validate-NuGetAndGallery {
         }
 
         $gallery = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
-        if (-not $gallery) {
-            throw "PSGallery não encontrada."
-        }
+        if (-not $gallery) { throw "PSGallery não encontrada." }
 
         if ($gallery.InstallationPolicy -ne 'Trusted') {
             Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
@@ -320,49 +295,54 @@ function Install-ModuleOfflineFromFolder {
     $sourcePath = Join-Path $OfflineRoot $Name
     if (-not (Test-Path $sourcePath)) {
         Write-Log ("Pasta offline não encontrada para o módulo {0}: {1}" -f $Name, $sourcePath) "ERROR" 2
-        return $false
+        return $null
     }
 
     $sourceVersionPath = Join-Path $sourcePath $RequiredVersion.ToString()
     if (-not (Test-Path $sourceVersionPath)) {
         Write-Log ("Versão offline esperada não encontrada para {0}: {1}" -f $Name, $sourceVersionPath) "ERROR" 2
-        return $false
+        return $null
     }
 
-    $targetRoots = @()
-    if ($PSVersionTable.PSVersion.Major -ge 6) {
-        $targetRoots += (Join-Path $HOME "Documents\PowerShell\Modules")
+    $preferredModuleRoot = Get-PreferredUserModulePath
+
+    if (-not $preferredModuleRoot) {
+        Write-Log "Nenhum caminho de módulos de usuário foi identificado no PSModulePath." "ERROR" 2
+        return $null
     }
-    $targetRoots += (Join-Path $HOME "Documents\WindowsPowerShell\Modules")
 
-    $copied = $false
+    Write-Log ("Caminho de módulos selecionado para instalação: {0}" -f $preferredModuleRoot) "INFO" 2
 
-    foreach ($root in $targetRoots | Select-Object -Unique) {
-        try {
-            if (-not (Test-Path $root)) {
-                New-Item -ItemType Directory -Path $root -Force | Out-Null
-            }
-
-            $targetModulePath = Join-Path $root $Name
-            if (-not (Test-Path $targetModulePath)) {
-                New-Item -ItemType Directory -Path $targetModulePath -Force | Out-Null
-            }
-
-            $targetVersionPath = Join-Path $targetModulePath $RequiredVersion.ToString()
-            if (Test-Path $targetVersionPath) {
-                Remove-Item $targetVersionPath -Recurse -Force -ErrorAction SilentlyContinue
-            }
-
-            Copy-Item -Path $sourceVersionPath -Destination $targetVersionPath -Recurse -Force -ErrorAction Stop
-            Write-Log ("Módulo {0} v{1} copiado para {2}" -f $Name, $RequiredVersion, $targetVersionPath) "SUCCESS" 2
-            $copied = $true
+    try {
+        if (-not (Test-Path $preferredModuleRoot)) {
+            New-Item -ItemType Directory -Path $preferredModuleRoot -Force | Out-Null
         }
-        catch {
-            Write-Log ("Falha ao copiar {0} para {1}: {2}" -f $Name, $root, $_.Exception.Message) "DEBUG" 2
-        }
-    }
 
-    return $copied
+        $targetModulePath = Join-Path $preferredModuleRoot $Name
+        if (-not (Test-Path $targetModulePath)) {
+            New-Item -ItemType Directory -Path $targetModulePath -Force | Out-Null
+        }
+
+        $targetVersionPath = Join-Path $targetModulePath $RequiredVersion.ToString()
+        if (Test-Path $targetVersionPath) {
+            Remove-Item $targetVersionPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        Copy-Item -Path $sourceVersionPath -Destination $targetVersionPath -Recurse -Force -ErrorAction Stop
+        Write-Log ("Módulo {0} v{1} copiado para {2}" -f $Name, $RequiredVersion, $targetVersionPath) "SUCCESS" 2
+
+        if (-not (Test-Path $targetVersionPath)) {
+            Write-Log ("O módulo {0} não foi encontrado no destino esperado: {1}" -f $Name, $targetVersionPath) "ERROR" 2
+            return $null
+        }
+
+        Write-Log ("Módulo {0} validado no caminho: {1}" -f $Name, $targetVersionPath) "SUCCESS" 2
+        return $targetVersionPath
+    }
+    catch {
+        Write-Log ("Falha ao copiar {0} para {1}: {2}" -f $Name, $preferredModuleRoot, $_.Exception.Message) "ERROR" 2
+        return $null
+    }
 }
 
 function Show-OfflineModuleInstructions {
@@ -426,17 +406,23 @@ function Test-And-LoadModule {
                 Write-Log ("Falha na instalação online de {0}: {1}" -f $name, $_.Exception.Message) "ERROR" 2
             }
 
-            if (-not (Test-ModuleVersion -ModuleName $name -RequiredVersion $requiredVersion)) {
+            $available = Get-LatestAvailableModule -Name $name
+
+            if (-not $available) {
                 Write-Log ("O módulo {0} v{1} não ficou disponível após a tentativa online" -f $name, $requiredVersion) "ERROR" 2
 
                 if (Test-Path (Join-Path $OfflineRoot $name)) {
                     Write-Log "Pacote offline detectado. Tentando instalação offline..." "INFO" 2
 
-                    $offlineInstalled = Install-ModuleOfflineFromFolder -Name $name -RequiredVersion $requiredVersion -OfflineRoot $OfflineRoot
-                    if (-not $offlineInstalled) {
+                    $offlineTargetVersionPath = Install-ModuleOfflineFromFolder -Name $name -RequiredVersion $requiredVersion -OfflineRoot $OfflineRoot
+                    if (-not $offlineTargetVersionPath) {
                         Show-OfflineModuleInstructions -ModuleName $name -OfflineRoot $OfflineRoot -AllModules $AllModules
                         return $false
                     }
+
+                    $available = Get-Module -ListAvailable -Name $name |
+                        Sort-Object Version -Descending |
+                        Select-Object -First 1
                 }
                 else {
                     Show-OfflineModuleInstructions -ModuleName $name -OfflineRoot $OfflineRoot -AllModules $AllModules
@@ -447,20 +433,41 @@ function Test-And-LoadModule {
         else {
             Write-Log "Sem internet ou instalação online desabilitada. Tentando instalação offline..." "INFO" 2
 
-            $offlineInstalled = Install-ModuleOfflineFromFolder -Name $name -RequiredVersion $requiredVersion -OfflineRoot $OfflineRoot
-            if (-not $offlineInstalled) {
+            $offlineTargetVersionPath = Install-ModuleOfflineFromFolder -Name $name -RequiredVersion $requiredVersion -OfflineRoot $OfflineRoot
+            if (-not $offlineTargetVersionPath) {
                 Show-OfflineModuleInstructions -ModuleName $name -OfflineRoot $OfflineRoot -AllModules $AllModules
                 return $false
             }
+
+            $available = Get-Module -ListAvailable -Name $name |
+                Sort-Object Version -Descending |
+                Select-Object -First 1
+
+            if (-not $available) {
+                Write-Log ("Módulo {0} não foi localizado após a instalação offline." -f $name) "ERROR" 2
+                return $false
+            }
+
+            Write-Log ("Módulo localizado após instalação: {0}" -f $available.Path) "DEBUG" 2
         }
     }
 
-    if (-not (Test-ModuleVersion -ModuleName $name -RequiredVersion $requiredVersion)) {
-        Write-Log ("Validação de versão falhou para {0}. Requerido: >= {1}" -f $name, $requiredVersion) "ERROR" 2
+    $validatedModule = Get-Module -ListAvailable -Name $name |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+
+    if (-not $validatedModule) {
+        Write-Log ("Módulo {0} não foi localizado após a instalação." -f $name) "ERROR" 2
         return $false
     }
 
-    $validatedModule = Get-LatestAvailableModule -Name $name
+    Write-Log ("Módulo localizado para validação: {0}" -f $validatedModule.Path) "DEBUG" 2
+
+    if ([version]$validatedModule.Version -lt $requiredVersion) {
+        Write-Log ("Validação de versão falhou para {0}. Requerido: >= {1}. Encontrado: {2}" -f $name, $requiredVersion, $validatedModule.Version) "ERROR" 2
+        return $false
+    }
+
     Write-Log ("Versão validada para {0}: v{1}" -f $name, $validatedModule.Version) "SUCCESS" 2
 
     if ($minimumPSEdition -eq "DesktopOnly" -and $PSEdition -ne "Desktop") {
