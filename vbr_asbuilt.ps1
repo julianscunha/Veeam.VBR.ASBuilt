@@ -42,29 +42,29 @@ If specified, the script will not prompt when Veeam v13+ is detected.
 Shows help for this script.
 
 .EXAMPLE
-.\vbr_asbuilt_v22.ps1
+.\vbr_asbuilt.ps1
 
 Runs the script interactively.
 
 .EXAMPLE
-.\vbr_asbuilt_v22.ps1 -Mode DownloadOnly
+.\vbr_asbuilt.ps1 -Mode DownloadOnly
 
 Downloads required modules to the offline modules folder.
 
 .EXAMPLE
-.\vbr_asbuilt_v22.ps1 -VBRServer vbr01.contoso.local -OutputPath C:\Temp\report
+.\vbr_asbuilt.ps1 -VBRServer vbr01.contoso.local -OutputPath C:\Temp\report
 
 Runs the full workflow against a remote VBR server.
 
 .EXAMPLE
-Get-Help .\vbr_asbuilt_v22.ps1 -Detailed
+Get-Help .\vbr_asbuilt.ps1 -Detailed
 
 Shows detailed help.
 
 .NOTES
 Author  : Juliano Cunha
 GitHub  : https://github.com/julianscunha
-Version : 1.0.0
+Version : 1.0.2
 Date    : 2026-04-02
 
 .REQUIREMENTS
