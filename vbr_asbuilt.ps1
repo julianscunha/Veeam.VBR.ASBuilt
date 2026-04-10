@@ -14,6 +14,53 @@ Includes:
 - Veeam connectivity and version detection
 - Execution summary and structured logging
 
+.PARAMETER relaunched
+Internal control parameter used when the script relaunches itself in PowerShell 7.
+
+.PARAMETER VBRServer
+Target Veeam Backup & Replication server. Default is localhost.
+
+.PARAMETER Mode
+Execution mode:
+- Full: normal validation and execution flow
+- DownloadOnly: download required modules only
+
+If not specified, the script prompts at startup.
+
+.PARAMETER ModulesPath
+Path used to store or read offline modules.
+Default: script_path\modules
+
+.PARAMETER OutputPath
+Directory used to store generated reports.
+Default: script_path\report
+
+.PARAMETER SkipVersionPrompt
+If specified, the script will not prompt when Veeam v13+ is detected.
+
+.PARAMETER Help
+Shows help for this script.
+
+.EXAMPLE
+.\vbr_asbuilt_v22.ps1
+
+Runs the script interactively.
+
+.EXAMPLE
+.\vbr_asbuilt_v22.ps1 -Mode DownloadOnly
+
+Downloads required modules to the offline modules folder.
+
+.EXAMPLE
+.\vbr_asbuilt_v22.ps1 -VBRServer vbr01.contoso.local -OutputPath C:\Temp\report
+
+Runs the full workflow against a remote VBR server.
+
+.EXAMPLE
+Get-Help .\vbr_asbuilt_v22.ps1 -Detailed
+
+Shows detailed help.
+
 .NOTES
 Author  : Juliano Cunha
 GitHub  : https://github.com/julianscunha
@@ -31,7 +78,12 @@ MIT License
 
 param(
     [int]$relaunched = 0,
-    [string]$VBRServer = "localhost"
+    [string]$VBRServer = "localhost",
+    [ValidateSet("Full","DownloadOnly")]
+    [string]$Mode,
+    [string]$ModulesPath,
+    [string]$OutputPath,
+    [switch]$SkipVersionPrompt
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,8 +109,8 @@ Clear-Host
 
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $logFile = Join-Path $ScriptRoot "AsBuiltReport_Veeam.log"
-$offlineModulesRoot = Join-Path $ScriptRoot "modules"
-$defaultReportOutput = Join-Path $ScriptRoot "report"
+$offlineModulesRoot = if ([string]::IsNullOrWhiteSpace($ModulesPath)) { Join-Path $ScriptRoot "modules" } else { $ModulesPath }
+$defaultReportOutput = if ([string]::IsNullOrWhiteSpace($OutputPath)) { Join-Path $ScriptRoot "report" } else { $OutputPath }
 
 $ExecutionSummary = [ordered]@{
     PowerShell              = "PENDING"
@@ -106,6 +158,76 @@ function Write-Log {
     }
 
     $line | Out-File -FilePath $logFile -Append -Encoding utf8
+}
+
+function Get-ExecutionMode {
+    param([string]$CurrentMode)
+
+    if (-not [string]::IsNullOrWhiteSpace($CurrentMode)) {
+        return $CurrentMode
+    }
+
+    Write-Section "MODO DE EXECUÇÃO"
+    Write-Log "Selecione o modo desejado:" "INFO" 1
+    Write-Log "1 - Execução normal (validação + relatório)" "INFO" 2
+    Write-Log "2 - Somente baixar pacotes" "INFO" 2
+
+    do {
+        $choice = Read-Host "Opção [1/2]"
+        switch ($choice) {
+            "1" { return "Full" }
+            "2" { return "DownloadOnly" }
+            default { Write-Log "Opção inválida. Informe 1 ou 2." "WARNING" 1 }
+        }
+    } while ($true)
+}
+
+function Download-RequiredModules {
+    param(
+        [Parameter(Mandatory)][array]$ModuleDefinitions,
+        [Parameter(Mandatory)][string]$DestinationPath,
+        [Parameter(Mandatory)][bool]$InternetAvailable
+    )
+
+    if (-not $InternetAvailable) {
+        Stop-WithFailure -SummaryKey "Modules" -Message "Modo DownloadOnly requer acesso à internet."
+    }
+
+    if (-not (Validate-NuGetAndGallery)) {
+        Stop-WithFailure -SummaryKey "NuGetGallery" -Message "Falha na validação de NuGet/PSGallery para download de módulos."
+    }
+
+    if (-not (Test-Path $DestinationPath)) {
+        New-Item -ItemType Directory -Path $DestinationPath -Force | Out-Null
+    }
+
+    Write-Section "DOWNLOAD DE PACOTES"
+    foreach ($moduleDef in $ModuleDefinitions) {
+        $name = $moduleDef.Name
+        $requiredVersion = $moduleDef.RequiredVersion
+        $optional = if ($moduleDef.ContainsKey("Optional")) { [bool]$moduleDef.Optional } else { $false }
+
+        try {
+            Write-Log ("Baixando módulo {0} v{1} para {2}" -f $name, $requiredVersion, $DestinationPath) "INFO" 1
+            Save-Module -Name $name -RequiredVersion $requiredVersion -Path $DestinationPath -Force -ErrorAction Stop
+            Write-Log ("Download concluído para {0} v{1}" -f $name, $requiredVersion) "SUCCESS" 2
+        }
+        catch {
+            if ($optional) {
+                Write-Log ("Falha no download do módulo opcional {0}: {1}" -f $name, $_.Exception.Message) "WARNING" 2
+            }
+            else {
+                Stop-WithFailure -SummaryKey "Modules" -Message ("Falha no download do módulo {0}: {1}" -f $name, $_.Exception.Message)
+            }
+        }
+    }
+
+    Update-Summary -Key "Modules" -Value "OK"
+    Update-Summary -Key "FinalStatus" -Value "OK"
+    Update-Summary -Key "FinalMessage" -Value ("Download de pacotes concluído em: {0}" -f $DestinationPath)
+    Write-FinalSummary
+    Pause-End
+    exit
 }
 
 function Write-Section {
@@ -532,6 +654,9 @@ $psVersion = $PSVersionTable.PSVersion.Major
 Write-Log ("Versão detectada: {0}" -f $psVersion) "INFO" 1
 Update-Summary -Key "PowerShell" -Value "OK"
 
+$Mode = Get-ExecutionMode -CurrentMode $Mode
+Write-Log ("Modo selecionado: {0}" -f $Mode) "INFO" 1
+
 Write-Log "Validação de conectividade" "INFO" 0
 $internetAvailable = Test-InternetConnectivity
 $onlineInstallEnabled = $false
@@ -539,6 +664,11 @@ $onlineInstallEnabled = $false
 if ($internetAvailable) {
     Write-Log "Internet disponível para instalação online de módulos" "INFO" 1
     Update-Summary -Key "Connectivity" -Value "OK"
+
+    if ($Mode -eq "DownloadOnly") {
+        Download-RequiredModules -ModuleDefinitions $ModulePresenceBaseline -DestinationPath $offlineModulesRoot -InternetAvailable $internetAvailable
+    }
+
     $onlineInstallEnabled = Validate-NuGetAndGallery
     if (-not $onlineInstallEnabled) {
         Write-Log "Instalação online de módulos será desabilitada e o script tentará apenas o modo offline." "WARNING" 1
@@ -550,6 +680,10 @@ else {
     Write-Log ("Será utilizada a pasta offline, se disponível: {0}" -f $offlineModulesRoot) "INFO" 1
     Update-Summary -Key "Connectivity" -Value "WARNING"
     Update-Summary -Key "NuGetGallery" -Value "SKIPPED"
+
+    if ($Mode -eq "DownloadOnly") {
+        Stop-WithFailure -SummaryKey "Connectivity" -Message "Modo DownloadOnly requer acesso à internet."
+    }
 }
 
 Write-Log "Validação de presença dos módulos AsBuilt" "INFO" 0
@@ -594,7 +728,8 @@ catch {
                 Update-Summary -Key "VeeamPowerShell" -Value "WARNING"
                 Update-Summary -Key "FinalStatus" -Value "WARNING"
                 Update-Summary -Key "FinalMessage" -Value "Relaunch em PowerShell 7 necessário para carregar os cmdlets do Veeam."
-                $argList = "-NoExit -File `"$PSCommandPath`" -relaunched 1 -VBRServer `"$VBRServer`""
+                $argList = "-NoExit -File `"$PSCommandPath`" -relaunched 1 -VBRServer `"$VBRServer`" -Mode Full -ModulesPath `"$offlineModulesRoot`" -OutputPath `"$defaultReportOutput`""
+                if ($SkipVersionPrompt) { $argList += " -SkipVersionPrompt" }
                 Start-Process $pwsh -ArgumentList $argList
                 exit
             }
@@ -653,8 +788,10 @@ try {
     if ($ver.Major -ge 13) {
         Write-Log "Versão 13+ detectada. O README oficial do report marca Veeam v13 como não suportado e indica compatibilidade do report apenas com Windows PowerShell 5.1." "WARNING" 1
         Update-Summary -Key "VeeamVersion" -Value "WARNING"
-        if (-not (Confirm-Action "Deseja continuar mesmo assim?")) {
-            Stop-WithFailure -SummaryKey "VeeamVersion" -Message "Execução cancelada pelo usuário após detecção de Veeam v13+."
+        if (-not $SkipVersionPrompt) {
+            if (-not (Confirm-Action "Deseja continuar mesmo assim?")) {
+                Stop-WithFailure -SummaryKey "VeeamVersion" -Message "Execução cancelada pelo usuário após detecção de Veeam v13+."
+            }
         }
     }
     else {
