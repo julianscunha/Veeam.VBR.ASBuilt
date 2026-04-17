@@ -5,7 +5,7 @@
 ![Repository](https://img.shields.io/badge/Repository-GitHub-black)
 ![Language](https://img.shields.io/badge/Language-PowerShell-blueviolet)
 ![Status](https://img.shields.io/badge/Status-Stable-success)
-![Last Updated](https://img.shields.io/badge/Last%20Updated-2026--04--02-informational)
+![Last Updated](https://img.shields.io/badge/Last%20Updated-2026--04--17-informational)
 
 ## Overview
 
@@ -36,6 +36,7 @@ This script was designed to:
 - Ensure correct loading of Veeam PowerShell components
 - Provide structured logging and execution summary
 - Improve user experience and troubleshooting
+- Prepare complete offline execution packages, including the NuGet provider
 
 ### Important Notes
 
@@ -48,7 +49,8 @@ This script was designed to:
 
 - Automated environment validation before report execution
 - Online and offline module validation and installation workflow
-- NuGet, PowerShellGet, and PSGallery validation
+- NuGet provider detection, export, promotion and validation
+- PowerShellGet and PSGallery validation for online operations
 - Automatic PowerShell 5.1 to PowerShell 7 relaunch when required by Veeam PowerShell components
 - Validation of required module versions before execution
 - Automatic report configuration JSON generation in the output directory
@@ -130,17 +132,18 @@ Get-Help .\vbr_asbuilt.ps1 -Detailed
 1. Validate PowerShell version and execution context
 2. Ask execution mode (`Full` or `DownloadOnly`)
 3. Validate internet connectivity
-4. Validate NuGet / PowerShellGet / PSGallery (online mode)
-5. Download required modules only **or** continue with full workflow
-6. Validate required AsBuiltReport modules and versions
-7. Install missing modules online or offline
-8. Import modules in controlled dependency order
-9. Validate and load Veeam PowerShell
-10. Connect to the target VBR server
-11. Detect and validate the Veeam version
-12. Prompt for output directory and generate the report JSON config
-13. Execute the AsBuilt report
-14. Write final summary to the log
+4. Validate PowerShellGet / PSGallery for online operations
+5. Validate or prepare the NuGet provider
+6. Download required modules only **or** continue with full workflow
+7. Validate required AsBuiltReport modules and versions
+8. Install missing modules online or offline
+9. Import modules in controlled dependency order
+10. Validate and load Veeam PowerShell
+11. Connect to the target VBR server
+12. Detect and validate the Veeam version
+13. Prompt for output directory and generate the report JSON config
+14. Execute the AsBuilt report
+15. Write final summary to the log
 
 ## Parameters
 
@@ -188,14 +191,18 @@ The script validates these modules and minimum versions:
 - AsBuiltReport.Core `1.6.2`
 - AsBuiltReport.Veeam.VBR `0.8.26`
 
+Additionally, the script validates the NuGet provider with a minimum version of:
+
+- NuGet provider `2.8.5.201`
+
 ## Online and Offline Module Handling
 
 ### Online Mode
 
 If internet access is available, the script validates:
-- NuGet provider
 - PowerShellGet
 - PSGallery trust configuration
+- NuGet provider availability and minimum version
 
 Then it attempts to install any missing or outdated modules directly from PSGallery.
 
@@ -204,6 +211,10 @@ Then it attempts to install any missing or outdated modules directly from PSGall
 If internet access is available, the script can run in `DownloadOnly` mode.
 
 This mode downloads all required modules to the offline package folder without executing the report workflow.
+
+It also prepares the **NuGet provider** for offline use:
+- if the local provider already meets the minimum version, it is exported to the offline package;
+- if the local provider is below the minimum version, the script attempts to obtain a suitable provider in an isolated temporary session and then exports it to the offline package.
 
 Example:
 
@@ -235,7 +246,17 @@ script_path\modules\PScriboCharts\0.9.0\...
 script_path\modules\PSGraph\2.1.38.27\...
 script_path\modules\Diagrammer.Core\0.2.39\...
 script_path\modules\Veeam.Diagrammer\0.6.34\...
+script_path\modules\NuGet\2.8.5.208\...
 ```
+
+For the NuGet provider, the script promotes the offline package to the standard PackageManagement discovery locations, such as:
+
+```text
+%LOCALAPPDATA%\PackageManagement\ProviderAssemblies\NuGet\<version>\
+C:\Program Files\PackageManagement\ProviderAssemblies\NuGet\<version>\
+```
+
+Success is accepted when the provider is recognized by the system after promotion, even if only one of the target locations is writable.
 
 If offline modules are not found, the script provides ready-to-run commands for a helper machine with internet access, for example:
 
@@ -247,6 +268,12 @@ Save-Module -Name Diagrammer.Core -RequiredVersion 0.2.39 -Path ".\modules"
 Save-Module -Name Veeam.Diagrammer -RequiredVersion 0.6.34 -Path ".\modules"
 Save-Module -Name AsBuiltReport.Core -RequiredVersion 1.6.2 -Path ".\modules"
 Save-Module -Name AsBuiltReport.Veeam.VBR -RequiredVersion 0.8.26 -Path ".\modules"
+```
+
+The offline package should also contain:
+
+```text
+.\modules\NuGet\<version>\...
 ```
 
 ## Veeam Version Handling
@@ -281,6 +308,7 @@ The log file stores full details, including:
 - SUCCESS
 - DEBUG
 - module paths
+- provider paths
 - version validation
 - final execution summary
 
@@ -300,6 +328,8 @@ ReportExecution: FAILED
 FinalStatus: FAILED
 ```
 
+In `DownloadOnly` mode, non-executed runtime stages are marked as `SKIPPED` in the final summary.
+
 ## Error Handling & Troubleshooting
 
 - If the Veeam DLL fails in Windows PowerShell 5.1, allow the script to relaunch in PowerShell 7
@@ -308,6 +338,7 @@ FinalStatus: FAILED
 - If you only want to prepare offline packages, use `-Mode DownloadOnly`
 - If `AsBuiltReport.Veeam.VBR.json` is missing, the script attempts to create it automatically in the output folder
 - If the report fails on Veeam v13, this is expected behavior from the current official AsBuiltReport.Veeam.VBR module
+- If the NuGet provider is not recognized offline, verify the contents of `modules\NuGet\<version>` and confirm that promotion to `ProviderAssemblies` succeeded
 - Use `Get-Help .\vbr_asbuilt.ps1 -Detailed` to view full parameter documentation
 
 ## Limitations
@@ -317,6 +348,7 @@ FinalStatus: FAILED
 - The script assumes the Veeam console components are installed and available on the execution host
 - Some modules behave differently between Windows PowerShell Desktop and PowerShell 7
 - `Veeam.Diagrammer` may be skipped in some offline/runtime scenarios without blocking the main report workflow
+- Full offline execution still depends on the behavior of the official AsBuiltReport modules and their interaction with PowerShellGet/PackageManagement in the local environment
 
 ## Security Considerations
 
@@ -358,6 +390,12 @@ Modules are distributed via PSGallery:
 
 - https://www.powershellgallery.com/packages/AsBuiltReport.Core  
 - https://www.powershellgallery.com/packages/AsBuiltReport.Veeam.VBR  
+
+### PackageManagement / NuGet Provider
+
+- https://learn.microsoft.com/powershell/module/packagemanagement/install-packageprovider
+- https://learn.microsoft.com/powershell/module/packagemanagement/get-packageprovider
+- https://stackoverflow.com/questions/51406685/how-do-i-install-the-nuget-provider-for-powershell-on-a-unconnected-machine-so-i
 
 ### Veeam Documentation
 
