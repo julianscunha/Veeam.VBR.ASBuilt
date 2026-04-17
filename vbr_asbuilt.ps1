@@ -832,6 +832,37 @@ if (-not $reportConfigPath) {
 }
 Update-Summary -Key "ReportConfig" -Value "OK"
 
+# Hardening para ambiente offline antes do New-AsBuiltReport
+if (-not $internetAvailable) {
+    Write-Log "Aplicando bloqueios de bootstrap automático do PowerShellGet para ambiente offline" "INFO" 1
+
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        $ConfirmPreference  = 'None'
+
+        # Garante que PSGallery não será usada por engano
+        $psGallery = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+        if ($psGallery) {
+            try {
+                Unregister-PSRepository -Name PSGallery -ErrorAction Stop
+                Write-Log "PSGallery removida temporariamente da sessão offline" "WARNING" 2
+            }
+            catch {
+                Write-Log ("Não foi possível remover PSGallery temporariamente: {0}" -f $_.Exception.Message) "DEBUG" 2
+            }
+        }
+
+        # Evita prompt interativo do PackageManagement/NuGet
+        $env:POWERSHELL_TELEMETRY_OPTOUT = '1'
+        $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+
+        Write-Log "Bloqueios offline aplicados antes do New-AsBuiltReport" "SUCCESS" 2
+    }
+    catch {
+        Write-Log ("Falha ao aplicar bloqueios offline: {0}" -f $_.Exception.Message) "WARNING" 2
+    }
+}
+
 Write-Log "Execução do AsBuiltReport" "INFO" 0
 
 try {
