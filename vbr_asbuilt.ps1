@@ -13,6 +13,7 @@ Includes:
 - PowerShell relaunch logic
 - Veeam connectivity and version detection
 - Execution summary and structured logging
+- NuGet provider handling for online and offline execution
 
 .PARAMETER relaunched
 Internal control parameter used when the script relaunches itself in PowerShell 7.
@@ -38,9 +39,6 @@ Default: script_path\report
 .PARAMETER SkipVersionPrompt
 If specified, the script will not prompt when Veeam v13+ is detected.
 
-.PARAMETER Help
-Shows help for this script.
-
 .EXAMPLE
 .\vbr_asbuilt.ps1
 
@@ -64,8 +62,8 @@ Shows detailed help.
 .NOTES
 Author  : Juliano Cunha
 GitHub  : https://github.com/julianscunha
-Version : 1.0.2
-Date    : 2026-04-02
+Version : 1.0.4
+Date    : 2026-04-17
 
 .REQUIREMENTS
 - Windows PowerShell 5.1 or PowerShell 7+
@@ -87,6 +85,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$ConfirmPreference = 'None'
 
 try {
     if ($PSVersionTable.PSVersion.Major -ge 7) {
@@ -111,6 +111,7 @@ $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $My
 $logFile = Join-Path $ScriptRoot "AsBuiltReport_Veeam.log"
 $offlineModulesRoot = if ([string]::IsNullOrWhiteSpace($ModulesPath)) { Join-Path $ScriptRoot "modules" } else { $ModulesPath }
 $defaultReportOutput = if ([string]::IsNullOrWhiteSpace($OutputPath)) { Join-Path $ScriptRoot "report" } else { $OutputPath }
+$NuGetMinimumVersion = [version]"2.8.5.201"
 
 $ExecutionSummary = [ordered]@{
     PowerShell              = "PENDING"
@@ -158,76 +159,6 @@ function Write-Log {
     }
 
     $line | Out-File -FilePath $logFile -Append -Encoding utf8
-}
-
-function Get-ExecutionMode {
-    param([string]$CurrentMode)
-
-    if (-not [string]::IsNullOrWhiteSpace($CurrentMode)) {
-        return $CurrentMode
-    }
-
-    Write-Section "MODO DE EXECUÇÃO"
-    Write-Log "Selecione o modo desejado:" "INFO" 1
-    Write-Log "1 - Execução normal (validação + relatório)" "INFO" 2
-    Write-Log "2 - Somente baixar pacotes" "INFO" 2
-
-    do {
-        $choice = Read-Host "Opção [1/2]"
-        switch ($choice) {
-            "1" { return "Full" }
-            "2" { return "DownloadOnly" }
-            default { Write-Log "Opção inválida. Informe 1 ou 2." "WARNING" 1 }
-        }
-    } while ($true)
-}
-
-function Download-RequiredModules {
-    param(
-        [Parameter(Mandatory)][array]$ModuleDefinitions,
-        [Parameter(Mandatory)][string]$DestinationPath,
-        [Parameter(Mandatory)][bool]$InternetAvailable
-    )
-
-    if (-not $InternetAvailable) {
-        Stop-WithFailure -SummaryKey "Modules" -Message "Modo DownloadOnly requer acesso à internet."
-    }
-
-    if (-not (Validate-NuGetAndGallery)) {
-        Stop-WithFailure -SummaryKey "NuGetGallery" -Message "Falha na validação de NuGet/PSGallery para download de módulos."
-    }
-
-    if (-not (Test-Path $DestinationPath)) {
-        New-Item -ItemType Directory -Path $DestinationPath -Force | Out-Null
-    }
-
-    Write-Section "DOWNLOAD DE PACOTES"
-    foreach ($moduleDef in $ModuleDefinitions) {
-        $name = $moduleDef.Name
-        $requiredVersion = $moduleDef.RequiredVersion
-        $optional = if ($moduleDef.ContainsKey("Optional")) { [bool]$moduleDef.Optional } else { $false }
-
-        try {
-            Write-Log ("Baixando módulo {0} v{1} para {2}" -f $name, $requiredVersion, $DestinationPath) "INFO" 1
-            Save-Module -Name $name -RequiredVersion $requiredVersion -Path $DestinationPath -Force -ErrorAction Stop
-            Write-Log ("Download concluído para {0} v{1}" -f $name, $requiredVersion) "SUCCESS" 2
-        }
-        catch {
-            if ($optional) {
-                Write-Log ("Falha no download do módulo opcional {0}: {1}" -f $name, $_.Exception.Message) "WARNING" 2
-            }
-            else {
-                Stop-WithFailure -SummaryKey "Modules" -Message ("Falha no download do módulo {0}: {1}" -f $name, $_.Exception.Message)
-            }
-        }
-    }
-
-    Update-Summary -Key "Modules" -Value "OK"
-    Update-Summary -Key "FinalStatus" -Value "OK"
-    Update-Summary -Key "FinalMessage" -Value ("Download de pacotes concluído em: {0}" -f $DestinationPath)
-    Write-FinalSummary
-    Pause-End
-    exit
 }
 
 function Write-Section {
@@ -295,6 +226,28 @@ function Stop-WithFailure {
     exit
 }
 
+function Get-ExecutionMode {
+    param([string]$CurrentMode)
+
+    if (-not [string]::IsNullOrWhiteSpace($CurrentMode)) {
+        return $CurrentMode
+    }
+
+    Write-Section "MODO DE EXECUÇÃO"
+    Write-Log "Selecione o modo desejado:" "INFO" 1
+    Write-Log "1 - Execução normal (validação + relatório)" "INFO" 2
+    Write-Log "2 - Somente baixar pacotes" "INFO" 2
+
+    do {
+        $choice = Read-Host "Opção [1/2]"
+        switch ($choice) {
+            "1" { return "Full" }
+            "2" { return "DownloadOnly" }
+            default { Write-Log "Opção inválida. Informe 1 ou 2." "WARNING" 1 }
+        }
+    } while ($true)
+}
+
 function Test-InternetConnectivity {
     $targets = @("https://www.powershellgallery.com","https://www.microsoft.com")
 
@@ -346,14 +299,14 @@ function Get-PreferredUserModulePath {
 
     if ($PSVersionTable.PSVersion.Major -ge 6) {
         $preferred = $modulePaths | Where-Object {
-            $_ -match '[\\\/](Documents|Documentos)[\\\/]PowerShell[\\\/]Modules$'
+            $_ -match '[\\/](Documents|Documentos)[\\/]PowerShell[\\/]Modules$'
         } | Select-Object -First 1
 
         if ($preferred) { return $preferred }
     }
 
     $preferred = $modulePaths | Where-Object {
-        $_ -match '[\\\/](Documents|Documentos)[\\\/]WindowsPowerShell[\\\/]Modules$'
+        $_ -match '[\\/](Documents|Documentos)[\\/]WindowsPowerShell[\\/]Modules$'
     } | Select-Object -First 1
 
     if ($preferred) { return $preferred }
@@ -361,22 +314,10 @@ function Get-PreferredUserModulePath {
     return $null
 }
 
-function Validate-NuGetAndGallery {
-    Write-Log "Validando NuGet / PowerShellGet / PSGallery" "INFO" 1
+function Validate-PowerShellGetAndGallery {
+    Write-Log "Validando PowerShellGet / PSGallery" "INFO" 1
 
     try {
-        $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
-        if ($nuget) {
-            Write-Log ("NuGet provider encontrado: v{0}" -f $nuget.Version) "SUCCESS" 2
-        }
-        else {
-            Write-Log "NuGet provider ausente. Tentando instalar..." "WARNING" 2
-            Install-PackageProvider -Name NuGet -Force -Scope CurrentUser -ErrorAction Stop | Out-Null
-            $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
-            if (-not $nuget) { throw "NuGet provider não ficou disponível após a tentativa de instalação." }
-            Write-Log ("NuGet provider instalado: v{0}" -f $nuget.Version) "SUCCESS" 2
-        }
-
         $powerShellGet = Get-Module -ListAvailable -Name PowerShellGet |
             Sort-Object Version -Descending |
             Select-Object -First 1
@@ -385,11 +326,13 @@ function Validate-NuGetAndGallery {
             Write-Log ("PowerShellGet encontrado: v{0}" -f $powerShellGet.Version) "SUCCESS" 2
         }
         else {
-            Write-Log "PowerShellGet não localizado em ListAvailable" "WARNING" 2
+            throw "PowerShellGet não localizado em ListAvailable."
         }
 
         $gallery = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
-        if (-not $gallery) { throw "PSGallery não encontrada." }
+        if (-not $gallery) {
+            throw "PSGallery não encontrada."
+        }
 
         if ($gallery.InstallationPolicy -ne 'Trusted') {
             Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
@@ -397,14 +340,426 @@ function Validate-NuGetAndGallery {
         }
 
         Write-Log ("PSGallery validada. Policy: {0}" -f $gallery.InstallationPolicy) "SUCCESS" 2
-        Update-Summary -Key "NuGetGallery" -Value "OK"
         return $true
     }
     catch {
-        Write-Log ("Falha na validação de NuGet/PSGallery: {0}" -f $_.Exception.Message) "ERROR" 2
-        Update-Summary -Key "NuGetGallery" -Value "FAILED"
+        Write-Log ("Falha na validação de PowerShellGet/PSGallery: {0}" -f $_.Exception.Message) "ERROR" 2
         return $false
     }
+}
+
+function Get-NuGetProviderRoots {
+    $roots = @()
+
+    if ($env:LOCALAPPDATA) {
+        $roots += (Join-Path $env:LOCALAPPDATA "PackageManagement\ProviderAssemblies\NuGet")
+    }
+
+    if ($env:ProgramFiles) {
+        $roots += (Join-Path $env:ProgramFiles "PackageManagement\ProviderAssemblies\NuGet")
+    }
+
+    return $roots | Select-Object -Unique
+}
+
+function Get-LatestAvailableNuGetProvider {
+    try {
+        $providers = Get-PackageProvider -Name NuGet -ListAvailable -ErrorAction SilentlyContinue
+        if (-not $providers) { return $null }
+
+        return $providers |
+            Sort-Object {[version]$_.Version} -Descending |
+            Select-Object -First 1
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-LatestInstalledNuGetProviderFolder {
+    $candidateFolders = @()
+
+    foreach ($root in (Get-NuGetProviderRoots)) {
+        if (Test-Path $root) {
+            $dirs = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
+            foreach ($dir in $dirs) {
+                try {
+                    $version = [version]$dir.Name
+                    $candidateFolders += [pscustomobject]@{
+                        Version = $version
+                        Path    = $dir.FullName
+                    }
+                }
+                catch {
+                }
+            }
+        }
+    }
+
+    return $candidateFolders |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+}
+
+function Get-OfflineNuGetProviderFolder {
+    param(
+        [Parameter(Mandatory)][string]$ModulesRoot,
+        [Parameter(Mandatory)][version]$RequiredVersion
+    )
+
+    $nugetRoot = Join-Path $ModulesRoot "NuGet"
+    if (-not (Test-Path $nugetRoot)) {
+        return $null
+    }
+
+    $candidateFolders = @()
+    $dirs = Get-ChildItem -Path $nugetRoot -Directory -ErrorAction SilentlyContinue
+
+    foreach ($dir in $dirs) {
+        try {
+            $version = [version]$dir.Name
+            if ($version -ge $RequiredVersion) {
+                $candidateFolders += [pscustomobject]@{
+                    Version = $version
+                    Path    = $dir.FullName
+                }
+            }
+        }
+        catch {
+        }
+    }
+
+    return $candidateFolders |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+}
+
+function Import-NuGetProviderToSession {
+    param(
+        [Parameter(Mandatory)][version]$RequiredVersion
+    )
+
+    try {
+        $provider = Get-LatestAvailableNuGetProvider
+        if (-not $provider) { return $false }
+
+        if ([version]$provider.Version -lt $RequiredVersion) { return $false }
+
+        Import-PackageProvider -Name NuGet -RequiredVersion $provider.Version -Force -ErrorAction Stop | Out-Null
+        Write-Log ("NuGet provider importado na sessão: v{0}" -f $provider.Version) "SUCCESS" 2
+        return $true
+    }
+    catch {
+        Write-Log ("Falha ao importar NuGet provider na sessão: {0}" -f $_.Exception.Message) "WARNING" 2
+        return $false
+    }
+}
+
+function Copy-NuGetProviderFolder {
+    param(
+        [Parameter(Mandatory)][string]$SourceFolder,
+        [Parameter(Mandatory)][string]$DestinationRoot
+    )
+
+    $providerVersion = Split-Path $SourceFolder -Leaf
+    $destinationVersionPath = Join-Path $DestinationRoot $providerVersion
+
+    if (-not (Test-Path $DestinationRoot)) {
+        New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
+    }
+
+    if (Test-Path $destinationVersionPath) {
+        Remove-Item $destinationVersionPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    Copy-Item -Path $SourceFolder -Destination $destinationVersionPath -Recurse -Force -ErrorAction Stop
+    return $destinationVersionPath
+}
+
+function Promote-NuGetProviderToSystem {
+    param(
+        [Parameter(Mandatory)][string]$SourceFolder,
+        [Parameter(Mandatory)][version]$RequiredVersion
+    )
+
+    $providerVersion = [version](Split-Path $SourceFolder -Leaf)
+    $targetRoots = @()
+
+    if ($env:LOCALAPPDATA) {
+        $targetRoots += (Join-Path $env:LOCALAPPDATA "PackageManagement\ProviderAssemblies\NuGet")
+    }
+
+    if ($env:ProgramFiles) {
+        $targetRoots += (Join-Path $env:ProgramFiles "PackageManagement\ProviderAssemblies\NuGet")
+    }
+
+    $copySuccess = $false
+
+    foreach ($root in ($targetRoots | Select-Object -Unique)) {
+        try {
+            $dest = Copy-NuGetProviderFolder -SourceFolder $SourceFolder -DestinationRoot $root
+            Write-Log ("NuGet provider v{0} copiado para {1}" -f $providerVersion, $dest) "SUCCESS" 2
+            $copySuccess = $true
+        }
+        catch {
+            Write-Log ("Falha ao copiar NuGet provider para {0}: {1}" -f $root, $_.Exception.Message) "WARNING" 2
+        }
+    }
+
+    if (-not $copySuccess) {
+        Write-Log "Nenhuma cópia do NuGet provider para os caminhos padrão do sistema foi concluída com sucesso." "ERROR" 2
+        return $false
+    }
+
+    [void](Import-NuGetProviderToSession -RequiredVersion $RequiredVersion)
+
+    $provider = Get-LatestAvailableNuGetProvider
+    if ($provider -and ([version]$provider.Version -ge $RequiredVersion)) {
+        Write-Log ("NuGet provider reconhecido pelo sistema após promoção: v{0}" -f $provider.Version) "SUCCESS" 2
+        return $true
+    }
+
+    Write-Log "NuGet provider foi copiado, mas não ficou reconhecido pelo sistema." "ERROR" 2
+    return $false
+}
+
+function Export-NuGetProviderToModulesFromFolder {
+    param(
+        [Parameter(Mandatory)][string]$SourceFolder,
+        [Parameter(Mandatory)][string]$ModulesRoot,
+        [Parameter(Mandatory)][version]$RequiredVersion
+    )
+
+    $sourceVersion = [version](Split-Path $SourceFolder -Leaf)
+    if ($sourceVersion -lt $RequiredVersion) {
+        Write-Log ("NuGet provider encontrado abaixo da versão mínima. Encontrado: {0} | Requerido: {1}" -f $sourceVersion, $RequiredVersion) "ERROR" 2
+        return $false
+    }
+
+    $targetRoot = Join-Path $ModulesRoot "NuGet"
+
+    try {
+        $dest = Copy-NuGetProviderFolder -SourceFolder $SourceFolder -DestinationRoot $targetRoot
+        Write-Log ("NuGet provider exportado para o pacote offline: {0}" -f $dest) "INFO" 2
+        return $true
+    }
+    catch {
+        Write-Log ("Falha ao exportar NuGet provider para o pacote offline: {0}" -f $_.Exception.Message) "ERROR" 2
+        return $false
+    }
+}
+
+function Invoke-IsolatedNuGetDownloadSession {
+    param(
+        [Parameter(Mandatory)][version]$RequiredVersion,
+        [Parameter(Mandatory)][string]$DestinationPath,
+        [Parameter(Mandatory)][array]$ModuleDefinitions
+    )
+
+    Write-Log "NuGet local abaixo do mínimo. Iniciando sessão isolada temporária para obtenção do provider e download dos módulos." "WARNING" 1
+
+    $originalLocalAppData = $env:LOCALAPPDATA
+    $tempRoot = Join-Path $env:TEMP ("VBR_AsBuilt_NuGet_" + [guid]::NewGuid().Guid)
+    $tempLocalAppData = Join-Path $tempRoot "LocalAppData"
+
+    try {
+        New-Item -ItemType Directory -Path $tempLocalAppData -Force | Out-Null
+        $env:LOCALAPPDATA = $tempLocalAppData
+
+        $gallery = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+        if ($gallery -and $gallery.InstallationPolicy -ne 'Trusted') {
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+        }
+
+        Install-PackageProvider -Name NuGet -MinimumVersion $RequiredVersion -Force -ForceBootstrap -Scope CurrentUser -Confirm:$false -ErrorAction Stop | Out-Null
+
+        $tempNuGetRoot = Join-Path $tempLocalAppData "PackageManagement\ProviderAssemblies\NuGet"
+        $tempProviderFolder = $null
+
+        if (Test-Path $tempNuGetRoot) {
+            $tempProviderFolder = Get-ChildItem -Path $tempNuGetRoot -Directory -ErrorAction SilentlyContinue |
+                ForEach-Object {
+                    try {
+                        [pscustomobject]@{
+                            Version = [version]$_.Name
+                            Path    = $_.FullName
+                        }
+                    }
+                    catch {
+                    }
+                } |
+                Where-Object { $_ -and $_.Version -ge $RequiredVersion } |
+                Sort-Object Version -Descending |
+                Select-Object -First 1
+        }
+
+        if (-not $tempProviderFolder) {
+            throw "O NuGet provider não foi encontrado na sessão isolada temporária."
+        }
+
+        if (-not (Export-NuGetProviderToModulesFromFolder -SourceFolder $tempProviderFolder.Path -ModulesRoot $DestinationPath -RequiredVersion $RequiredVersion)) {
+            throw "Falha ao exportar o NuGet provider da sessão isolada."
+        }
+
+        foreach ($moduleDef in $ModuleDefinitions) {
+            $name = $moduleDef.Name
+            $requiredVersionText = $moduleDef.RequiredVersion
+            $optional = if ($moduleDef.ContainsKey("Optional")) { [bool]$moduleDef.Optional } else { $false }
+
+            try {
+                Write-Log ("Baixando módulo {0} v{1} para {2} em sessão isolada" -f $name, $requiredVersionText, $DestinationPath) "INFO" 1
+                Save-Module -Name $name -RequiredVersion $requiredVersionText -Path $DestinationPath -Force -Confirm:$false -ErrorAction Stop
+                Write-Log ("Download concluído para {0} v{1}" -f $name, $requiredVersionText) "SUCCESS" 2
+            }
+            catch {
+                if ($optional) {
+                    Write-Log ("Falha no download do módulo opcional {0}: {1}" -f $name, $_.Exception.Message) "WARNING" 2
+                }
+                else {
+                    throw
+                }
+            }
+        }
+
+        return $true
+    }
+    catch {
+        Write-Log ("Falha na sessão isolada de obtenção do NuGet provider: {0}" -f $_.Exception.Message) "ERROR" 2
+        return $false
+    }
+    finally {
+        $env:LOCALAPPDATA = $originalLocalAppData
+
+        try {
+            if (Test-Path $tempRoot) {
+                Remove-Item $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+        catch {
+            Write-Log ("Não foi possível remover a área temporária isolada do NuGet: {0}" -f $_.Exception.Message) "DEBUG" 2
+        }
+    }
+}
+
+function Ensure-NuGetProviderPresent {
+    param(
+        [Parameter(Mandatory)][version]$RequiredVersion,
+        [Parameter(Mandatory)][bool]$InternetAvailable,
+        [Parameter(Mandatory)][bool]$OnlineInstallEnabled,
+        [Parameter(Mandatory)][string]$OfflineRoot
+    )
+
+    Write-Log "Validando presença do NuGet provider" "INFO" 1
+
+    $provider = Get-LatestAvailableNuGetProvider
+    if ($provider -and ([version]$provider.Version -ge $RequiredVersion)) {
+        Write-Log ("NuGet provider já disponível: v{0}" -f $provider.Version) "SUCCESS" 2
+        [void](Import-NuGetProviderToSession -RequiredVersion $RequiredVersion)
+        return $true
+    }
+
+    if ($provider) {
+        Write-Log ("NuGet provider abaixo da versão mínima. Encontrado: {0} | Requerido: {1}" -f $provider.Version, $RequiredVersion) "WARNING" 2
+    }
+    else {
+        Write-Log "NuGet provider não encontrado localmente" "WARNING" 2
+    }
+
+    if ($InternetAvailable -and $OnlineInstallEnabled) {
+        try {
+            Write-Log "Tentando instalação online do NuGet provider..." "INFO" 2
+            Install-PackageProvider -Name NuGet -MinimumVersion $RequiredVersion -Force -ForceBootstrap -Scope CurrentUser -Confirm:$false -ErrorAction Stop | Out-Null
+            [void](Import-NuGetProviderToSession -RequiredVersion $RequiredVersion)
+        }
+        catch {
+            Write-Log ("Falha na instalação online do NuGet provider: {0}" -f $_.Exception.Message) "WARNING" 2
+        }
+    }
+
+    $provider = Get-LatestAvailableNuGetProvider
+    if ($provider -and ([version]$provider.Version -ge $RequiredVersion)) {
+        Write-Log ("NuGet provider disponível após tentativa online: v{0}" -f $provider.Version) "SUCCESS" 2
+        return $true
+    }
+
+    $offlineProviderFolder = Get-OfflineNuGetProviderFolder -ModulesRoot $OfflineRoot -RequiredVersion $RequiredVersion
+    if (-not $offlineProviderFolder) {
+        Write-Log ("NuGet provider offline não encontrado em {0}" -f (Join-Path $OfflineRoot "NuGet")) "ERROR" 2
+        return $false
+    }
+
+    Write-Log ("Tentando promover NuGet provider offline a partir de {0}" -f $offlineProviderFolder.Path) "INFO" 2
+    return (Promote-NuGetProviderToSystem -SourceFolder $offlineProviderFolder.Path -RequiredVersion $RequiredVersion)
+}
+
+function Download-RequiredModules {
+    param(
+        [Parameter(Mandatory)][array]$ModuleDefinitions,
+        [Parameter(Mandatory)][string]$DestinationPath,
+        [Parameter(Mandatory)][bool]$InternetAvailable,
+        [Parameter(Mandatory)][version]$RequiredNuGetVersion
+    )
+
+    if (-not $InternetAvailable) {
+        Stop-WithFailure -SummaryKey "Modules" -Message "Modo DownloadOnly requer acesso à internet."
+    }
+
+    if (-not (Test-Path $DestinationPath)) {
+        New-Item -ItemType Directory -Path $DestinationPath -Force | Out-Null
+    }
+
+    Write-Section "DOWNLOAD DE PACOTES"
+
+    $localProviderFolder = Get-LatestInstalledNuGetProviderFolder
+    $localProvider = Get-LatestAvailableNuGetProvider
+
+    if ($localProvider -and ([version]$localProvider.Version -ge $RequiredNuGetVersion) -and $localProviderFolder) {
+        Write-Log ("NuGet provider local atende ao mínimo: v{0}" -f $localProvider.Version) "SUCCESS" 1
+        [void](Import-NuGetProviderToSession -RequiredVersion $RequiredNuGetVersion)
+
+        if (-not (Export-NuGetProviderToModulesFromFolder -SourceFolder $localProviderFolder.Path -ModulesRoot $DestinationPath -RequiredVersion $RequiredNuGetVersion)) {
+            Stop-WithFailure -SummaryKey "NuGetGallery" -Message "Falha ao exportar o NuGet provider local para o pacote offline."
+        }
+
+        foreach ($moduleDef in $ModuleDefinitions) {
+            $name = $moduleDef.Name
+            $requiredVersionText = $moduleDef.RequiredVersion
+            $optional = if ($moduleDef.ContainsKey("Optional")) { [bool]$moduleDef.Optional } else { $false }
+
+            try {
+                Write-Log ("Baixando módulo {0} v{1} para {2}" -f $name, $requiredVersionText, $DestinationPath) "INFO" 1
+                Save-Module -Name $name -RequiredVersion $requiredVersionText -Path $DestinationPath -Force -Confirm:$false -ErrorAction Stop
+                Write-Log ("Download concluído para {0} v{1}" -f $name, $requiredVersionText) "SUCCESS" 2
+            }
+            catch {
+                if ($optional) {
+                    Write-Log ("Falha no download do módulo opcional {0}: {1}" -f $name, $_.Exception.Message) "WARNING" 2
+                }
+                else {
+                    Stop-WithFailure -SummaryKey "Modules" -Message ("Falha no download do módulo {0}: {1}" -f $name, $_.Exception.Message)
+                }
+            }
+        }
+    }
+    else {
+        $isolatedOk = Invoke-IsolatedNuGetDownloadSession -RequiredVersion $RequiredNuGetVersion -DestinationPath $DestinationPath -ModuleDefinitions $ModuleDefinitions
+        if (-not $isolatedOk) {
+            Stop-WithFailure -SummaryKey "NuGetGallery" -Message "Falha ao preparar o NuGet provider e os módulos em sessão isolada."
+        }
+    }
+
+    Update-Summary -Key "NuGetGallery" -Value "OK"
+    Update-Summary -Key "Modules" -Value "OK"
+    Update-Summary -Key "VeeamPowerShell" -Value "SKIPPED"
+    Update-Summary -Key "VeeamConnection" -Value "SKIPPED"
+    Update-Summary -Key "VeeamVersion" -Value "SKIPPED"
+    Update-Summary -Key "ReportConfig" -Value "SKIPPED"
+    Update-Summary -Key "ReportExecution" -Value "SKIPPED"
+    Update-Summary -Key "FinalStatus" -Value "OK"
+    Update-Summary -Key "FinalMessage" -Value ("Download de pacotes concluído em: {0}" -f $DestinationPath)
+    Write-FinalSummary
+    Pause-End
+    exit
 }
 
 function Install-ModuleOfflineFromFolder {
@@ -483,6 +838,7 @@ function Show-OfflineModuleInstructions {
         Write-Log ("Save-Module -Name {0} -RequiredVersion {1} -Path `"{2}`"" -f $module.Name, $module.RequiredVersion, $OfflineRoot) "INFO" 2
     }
 
+    Write-Log ("NuGet provider esperado em: {0}" -f (Join-Path $OfflineRoot "NuGet\<versão>")) "INFO" 2
     Write-Log "Depois de copiar a pasta modules ao lado do script, reexecute este mesmo arquivo." "INFO" 1
 }
 
@@ -516,7 +872,7 @@ function Ensure-AllModulesPresent {
         if ($InternetAvailable -and $OnlineInstallEnabled) {
             Write-Log ("Tentando instalação online de {0}..." -f $name) "INFO" 2
             try {
-                Install-Module -Name $name -RequiredVersion $requiredVersion -Force -Scope CurrentUser -AllowClobber -ErrorAction Stop
+                Install-Module -Name $name -RequiredVersion $requiredVersion -Force -Scope CurrentUser -AllowClobber -Confirm:$false -ErrorAction Stop
                 Write-Log ("Instalação online concluída para {0} v{1}" -f $name, $requiredVersion) "SUCCESS" 2
             }
             catch {
@@ -662,17 +1018,19 @@ $internetAvailable = Test-InternetConnectivity
 $onlineInstallEnabled = $false
 
 if ($internetAvailable) {
-    Write-Log "Internet disponível para instalação online de módulos" "INFO" 1
+    Write-Log "Internet disponível para operações online" "INFO" 1
     Update-Summary -Key "Connectivity" -Value "OK"
-
-    if ($Mode -eq "DownloadOnly") {
-        Download-RequiredModules -ModuleDefinitions $ModulePresenceBaseline -DestinationPath $offlineModulesRoot -InternetAvailable $internetAvailable
+    $onlineInstallEnabled = Validate-PowerShellGetAndGallery
+    if ($onlineInstallEnabled) {
+        Update-Summary -Key "NuGetGallery" -Value "OK"
+    }
+    else {
+        Write-Log "Operações online de PowerShellGet/PSGallery serão desabilitadas." "WARNING" 1
+        Update-Summary -Key "NuGetGallery" -Value "WARNING"
     }
 
-    $onlineInstallEnabled = Validate-NuGetAndGallery
-    if (-not $onlineInstallEnabled) {
-        Write-Log "Instalação online de módulos será desabilitada e o script tentará apenas o modo offline." "WARNING" 1
-        Update-Summary -Key "NuGetGallery" -Value "WARNING"
+    if ($Mode -eq "DownloadOnly") {
+        Download-RequiredModules -ModuleDefinitions $ModulePresenceBaseline -DestinationPath $offlineModulesRoot -InternetAvailable $internetAvailable -RequiredNuGetVersion $NuGetMinimumVersion
     }
 }
 else {
@@ -686,14 +1044,14 @@ else {
     }
 }
 
+Write-Log "Validação do NuGet provider" "INFO" 0
+$nugetOk = Ensure-NuGetProviderPresent -RequiredVersion $NuGetMinimumVersion -InternetAvailable $internetAvailable -OnlineInstallEnabled $onlineInstallEnabled -OfflineRoot $offlineModulesRoot
+if (-not $nugetOk) {
+    Stop-WithFailure -SummaryKey "NuGetGallery" -Message "Falha na validação/promoção do NuGet provider."
+}
+
 Write-Log "Validação de presença dos módulos AsBuilt" "INFO" 0
-
-$presenceOk = Ensure-AllModulesPresent `
-    -ModuleDefinitions $ModulePresenceBaseline `
-    -InternetAvailable $internetAvailable `
-    -OnlineInstallEnabled $onlineInstallEnabled `
-    -OfflineRoot $offlineModulesRoot
-
+$presenceOk = Ensure-AllModulesPresent -ModuleDefinitions $ModulePresenceBaseline -InternetAvailable $internetAvailable -OnlineInstallEnabled $onlineInstallEnabled -OfflineRoot $offlineModulesRoot
 if (-not $presenceOk) {
     Stop-WithFailure -SummaryKey "Modules" -Message "Falha na validação ou instalação dos módulos necessários."
 }
@@ -706,7 +1064,6 @@ if (-not $importOk) {
 Update-Summary -Key "Modules" -Value "OK"
 
 Write-Log "Carregamento do Veeam" "INFO" 0
-
 $veeamDll = "C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell.dll"
 
 if (-not (Test-Path $veeamDll)) {
@@ -714,11 +1071,21 @@ if (-not (Test-Path $veeamDll)) {
 }
 
 try {
+    Write-Log ("PowerShell Edition: {0}" -f $PSEdition) "INFO" 1
+    Write-Log ("PowerShell Version: {0}" -f $PSVersionTable.PSVersion) "INFO" 1
+    Write-Log ("DLL do Veeam: {0}" -f $veeamDll) "INFO" 1
+
     Import-Module $veeamDll -ErrorAction Stop -DisableNameChecking -WarningAction SilentlyContinue
     Write-Log "DLL carregada com sucesso" "SUCCESS" 1
 }
 catch {
     Write-Log ("Falha ao carregar DLL do Veeam: {0}" -f $_.Exception.Message) "WARNING" 1
+
+    if ($_.Exception.InnerException) {
+        Write-Log ("InnerException: {0}" -f $_.Exception.InnerException.Message) "ERROR" 1
+    }
+
+    Write-Log ("StackTrace: {0}" -f $_.Exception.StackTrace) "DEBUG" 1
 
     if ($psVersion -lt 7) {
         if (Confirm-Action "Executar em PowerShell 7?") {
@@ -754,7 +1121,6 @@ Write-Log "PowerShell Veeam funcional" "SUCCESS" 1
 Update-Summary -Key "VeeamPowerShell" -Value "OK"
 
 Write-Log "Conexão com Veeam" "INFO" 0
-
 try {
     Connect-VBRServer -Server $VBRServer | Out-Null
     Write-Log ("Conectado ao servidor Veeam: {0}" -f $VBRServer) "SUCCESS" 1
@@ -765,20 +1131,17 @@ catch {
 }
 
 Write-Log "Validação da versão do Veeam" "INFO" 0
-
 try {
     $info = Get-VBRBackupServerInfo
     Write-Log "Dados retornados:" "DEBUG" 1
     Write-Log ($info | Format-Table | Out-String) "DEBUG" 2
 
     $version = $info.Build
-
     if (-not $version) {
         throw "Campo Build não encontrado"
     }
 
     Write-Log ("Versão detectada: {0}" -f $version) "INFO" 1
-
     $ver = [version]$version
 
     if ($ver.Major -lt 12) {
@@ -803,7 +1166,6 @@ catch {
 }
 
 Write-Log "Entrada de parâmetros" "INFO" 0
-
 $target = Read-Host "Servidor [$VBRServer]"
 if ([string]::IsNullOrWhiteSpace($target)) {
     $target = $VBRServer
@@ -832,15 +1194,12 @@ if (-not $reportConfigPath) {
 }
 Update-Summary -Key "ReportConfig" -Value "OK"
 
-# Hardening para ambiente offline antes do New-AsBuiltReport
 if (-not $internetAvailable) {
     Write-Log "Aplicando bloqueios de bootstrap automático do PowerShellGet para ambiente offline" "INFO" 1
 
     try {
-        $ProgressPreference = 'SilentlyContinue'
-        $ConfirmPreference  = 'None'
+        [void](Import-NuGetProviderToSession -RequiredVersion $NuGetMinimumVersion)
 
-        # Garante que PSGallery não será usada por engano
         $psGallery = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
         if ($psGallery) {
             try {
@@ -852,11 +1211,10 @@ if (-not $internetAvailable) {
             }
         }
 
-        # Evita prompt interativo do PackageManagement/NuGet
         $env:POWERSHELL_TELEMETRY_OPTOUT = '1'
         $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 
-        Write-Log "Bloqueios offline aplicados antes do New-AsBuiltReport" "SUCCESS" 2
+        Write-Log "Bloqueios offline aplicados antes da execução do AsBuiltReport" "SUCCESS" 2
     }
     catch {
         Write-Log ("Falha ao aplicar bloqueios offline: {0}" -f $_.Exception.Message) "WARNING" 2
@@ -864,7 +1222,6 @@ if (-not $internetAvailable) {
 }
 
 Write-Log "Execução do AsBuiltReport" "INFO" 0
-
 try {
     New-AsBuiltReport `
         -Report Veeam.VBR `
