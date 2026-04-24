@@ -1,7 +1,10 @@
 param(
-    [string]$Mode,
+    [ValidateSet("Normal","DownloadOnly")]
+    [string]$Mode = "Normal",
+
     [string]$OutputPath,
     [string]$ModulesPath,
+
     [string]$Version = "latest"
 )
 
@@ -13,6 +16,10 @@ $scriptPath = Join-Path $currentPath "vbr_asbuilt.ps1"
 
 Write-Host ""
 Write-Host "===== Veeam VBR AsBuilt =====" -ForegroundColor Cyan
+
+# ---------------- DEFAULT PATHS ----------------
+if (-not $OutputPath)  { $OutputPath  = Join-Path $currentPath "report" }
+if (-not $ModulesPath) { $ModulesPath = Join-Path $currentPath "modules" }
 
 # ---------------- DOWNLOAD / UPDATE ----------------
 try {
@@ -37,7 +44,7 @@ try {
     }
 }
 catch {
-    Write-Host "Sem internet ou falha no download. Usando versão local..." -ForegroundColor Yellow
+    Write-Host "Modo offline ou falha no download. Usando versão local..." -ForegroundColor Yellow
 }
 
 # ---------------- VALIDA EXISTÊNCIA ----------------
@@ -48,53 +55,43 @@ if (-not (Test-Path $scriptPath)) {
 }
 
 # ---------------- GARANTE PASTAS ----------------
-$modulesPathDefault = Join-Path $currentPath "modules"
-$reportPathDefault  = Join-Path $currentPath "report"
-
-if (-not (Test-Path $modulesPathDefault)) {
-    New-Item -ItemType Directory -Path $modulesPathDefault | Out-Null
+if (-not (Test-Path $ModulesPath)) {
+    New-Item -ItemType Directory -Path $ModulesPath | Out-Null
 }
 
-if (-not (Test-Path $reportPathDefault)) {
-    New-Item -ItemType Directory -Path $reportPathDefault | Out-Null
+if (-not (Test-Path $OutputPath)) {
+    New-Item -ItemType Directory -Path $OutputPath | Out-Null
 }
 
-# ---------------- EXECUÇÃO SEGURA ----------------
+# ---------------- EXECUÇÃO ----------------
 Write-Host ""
 Write-Host "Executando AsBuilt..." -ForegroundColor Cyan
 
 try {
-    # 🔥 cria scriptblock (corrige problema de parâmetros)
-# 🔥 força bypass só para essa execução
-$psArgs = @(
-    "-NoProfile"
-    "-ExecutionPolicy", "Bypass"
-    "-File", "`"$scriptPath`""
-)
+    $psArgs = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "`"$scriptPath`"",
+        "-Mode", "`"$Mode`"",
+        "-OutputPath", "`"$OutputPath`"",
+        "-ModulesPath", "`"$ModulesPath`""
+    )
 
-if ($Mode)        { $psArgs += "-Mode";        $psArgs += "`"$Mode`"" }
-if ($OutputPath)  { $psArgs += "-OutputPath";  $psArgs += "`"$OutputPath`"" }
-if ($ModulesPath) { $psArgs += "-ModulesPath"; $psArgs += "`"$ModulesPath`"" }
+    # 🔍 debug leve (pode comentar se quiser)
+    Write-Host "Args:" -ForegroundColor DarkGray
+    Write-Host ($psArgs -join " ") -ForegroundColor DarkGray
 
-if (-not $Mode) {
-    $Mode = "Normal"
-}
+    Start-Process powershell -ArgumentList $psArgs -Wait -NoNewWindow
 
-Start-Process powershell -ArgumentList $psArgs -Wait -NoNewWindow
+    # ---------------- CONTROLE DE FLUXO ----------------
+    if ($Mode -eq "DownloadOnly") {
+        Write-Host ""
+        Write-Host "Download concluído. Encerrando." -ForegroundColor Green
+        return
+    }
 
-    # 🔥 parâmetros reais (binding correto)
-$invokeParams = @{}
-
-# defaults seguros
-if (-not $OutputPath)  { $OutputPath  = Join-Path $currentPath "report" }
-if (-not $ModulesPath) { $ModulesPath = Join-Path $currentPath "modules" }
-
-$invokeParams["OutputPath"]  = $OutputPath
-$invokeParams["ModulesPath"] = $ModulesPath
-
-if ($Mode) { $invokeParams["Mode"] = $Mode }
-
-    & $scriptBlock @invokeParams
+    Write-Host ""
+    Write-Host "Execução finalizada." -ForegroundColor Green
 }
 catch {
     Write-Host ""
