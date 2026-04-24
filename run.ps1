@@ -34,6 +34,12 @@ if (-not $Mode) {
         }
     }
 }
+else {
+    if ($Mode -notin @("Full","DownloadOnly")) {
+        Write-Host "Modo inválido: $Mode" -ForegroundColor Red
+        exit 1
+    }
+}
 
 # ---------------- DEFAULT PATHS ----------------
 if (-not $OutputPath)  { $OutputPath  = Join-Path $currentPath "report" }
