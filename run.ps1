@@ -110,6 +110,9 @@ if ($hasInternet) {
             }
 
             Move-Item $tempFile $scriptPath -Force
+
+            # 🔥 Desbloqueia o arquivo baixado (evita bloqueio do Windows)
+            Unblock-File -Path $scriptPath -ErrorAction SilentlyContinue
         }
 
     }
