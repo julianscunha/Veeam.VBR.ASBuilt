@@ -76,6 +76,10 @@ if ($Mode)        { $psArgs += "-Mode";        $psArgs += "`"$Mode`"" }
 if ($OutputPath)  { $psArgs += "-OutputPath";  $psArgs += "`"$OutputPath`"" }
 if ($ModulesPath) { $psArgs += "-ModulesPath"; $psArgs += "`"$ModulesPath`"" }
 
+if (-not $Mode) {
+    $Mode = "Normal"
+}
+
 Start-Process powershell -ArgumentList $psArgs -Wait -NoNewWindow
 
     # 🔥 parâmetros reais (binding correto)
