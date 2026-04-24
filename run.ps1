@@ -132,8 +132,10 @@ if ($ModulesPath) { $argList += " -ModulesPath `"$ModulesPath`"" }
 Write-Host ""
 Write-Host "Executando AsBuilt..." -ForegroundColor Cyan
 
-& $scriptPath @(
-    if ($Mode)        { "-Mode"; $Mode }
-    if ($OutputPath)  { "-OutputPath"; $OutputPath }
-    if ($ModulesPath) { "-ModulesPath"; $ModulesPath }
-)
+$arguments = @()
+
+if ($Mode)        { $arguments += "-Mode"; $arguments += $Mode }
+if ($OutputPath)  { $arguments += "-OutputPath"; $arguments += $OutputPath }
+if ($ModulesPath) { $arguments += "-ModulesPath"; $arguments += $ModulesPath }
+
+& $scriptPath @arguments
