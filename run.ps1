@@ -1,4 +1,3 @@
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 param(
     [string]$Mode,
     [string]$OutputPath,
@@ -7,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 $repo = "julianscunha/Veeam.VBR.ASBuilt"
 $currentPath = Get-Location
