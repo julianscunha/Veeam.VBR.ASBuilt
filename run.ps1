@@ -65,8 +65,18 @@ Write-Host "Executando AsBuilt..." -ForegroundColor Cyan
 
 try {
     # 🔥 cria scriptblock (corrige problema de parâmetros)
-    $scriptContent = Get-Content $scriptPath -Raw
-    $scriptBlock = [ScriptBlock]::Create($scriptContent)
+# 🔥 força bypass só para essa execução
+$psArgs = @(
+    "-NoProfile"
+    "-ExecutionPolicy", "Bypass"
+    "-File", "`"$scriptPath`""
+)
+
+if ($Mode)        { $psArgs += "-Mode";        $psArgs += "`"$Mode`"" }
+if ($OutputPath)  { $psArgs += "-OutputPath";  $psArgs += "`"$OutputPath`"" }
+if ($ModulesPath) { $psArgs += "-ModulesPath"; $psArgs += "`"$ModulesPath`"" }
+
+Start-Process powershell -ArgumentList $psArgs -Wait -NoNewWindow
 
     # 🔥 parâmetros reais (binding correto)
 $invokeParams = @{}
