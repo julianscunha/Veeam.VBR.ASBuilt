@@ -5,9 +5,6 @@ param(
     [string]$Version = "latest"
 )
 
-# 🔥 CRÍTICO: evita erro de assinatura (RemoteSigned)
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
-
 $ErrorActionPreference = "Stop"
 
 $repo = "julianscunha/Veeam.VBR.ASBuilt"
@@ -54,13 +51,12 @@ function Get-LocalScriptVersion {
     return $null
 }
 
-# ---------------- HEADER ----------------
 Write-Host ""
 Write-Host "===== Veeam VBR AsBuilt =====" -ForegroundColor Cyan
 
 $hasInternet = Test-InternetConnection
 
-# ---------------- ONLINE ----------------
+# ---------------- DOWNLOAD / UPDATE ----------------
 if ($hasInternet) {
 
     try {
@@ -82,7 +78,6 @@ if ($hasInternet) {
         $downloadNeeded = $false
 
         if ($localVersion) {
-
             if ($localVersion -ne $latestVersion) {
 
                 Write-Host ""
@@ -101,7 +96,6 @@ if ($hasInternet) {
         }
 
         if ($downloadNeeded) {
-
             Write-Host "Baixando script..." -ForegroundColor Cyan
 
             $tempFile = Join-Path $currentPath "vbr_asbuilt.tmp.ps1"
@@ -113,9 +107,6 @@ if ($hasInternet) {
             }
 
             Move-Item $tempFile $scriptPath -Force
-
-            # 🔥 IMPORTANTE: desbloqueia arquivo baixado
-            Unblock-File -Path $scriptPath -ErrorAction SilentlyContinue
         }
 
     }
@@ -124,16 +115,14 @@ if ($hasInternet) {
     }
 }
 
-# ---------------- OFFLINE ----------------
-# (silencioso como definido)
-
 # ---------------- VALIDA SCRIPT ----------------
 if (-not (Test-Path $scriptPath)) {
     Write-Host "Script não encontrado." -ForegroundColor Red
+    Read-Host "Pressione ENTER para sair"
     exit 1
 }
 
-# ---------------- ESTRUTURA ----------------
+# ---------------- GARANTE PASTAS ----------------
 $modulesPathDefault = Join-Path $currentPath "modules"
 $reportPathDefault  = Join-Path $currentPath "report"
 
@@ -145,19 +134,23 @@ if (-not (Test-Path $reportPathDefault)) {
     New-Item -ItemType Directory -Path $reportPathDefault | Out-Null
 }
 
-# ---------------- EXECUÇÃO ----------------
+# ---------------- EXECUÇÃO SEGURA ----------------
 Write-Host ""
 Write-Host "Executando AsBuilt..." -ForegroundColor Cyan
 
-$arguments = @()
-
-if ($Mode)        { $arguments += "-Mode";        $arguments += $Mode }
-if ($OutputPath)  { $arguments += "-OutputPath";  $arguments += $OutputPath }
-if ($ModulesPath) { $arguments += "-ModulesPath"; $arguments += $ModulesPath }
-
 try {
-    & $scriptPath @arguments
+    $scriptContent = Get-Content $scriptPath -Raw
+
+    $argString = ""
+
+    if ($Mode)        { $argString += " -Mode `"$Mode`"" }
+    if ($OutputPath)  { $argString += " -OutputPath `"$OutputPath`"" }
+    if ($ModulesPath) { $argString += " -ModulesPath `"$ModulesPath`"" }
+
+    Invoke-Expression "$scriptContent $argString"
 }
 catch {
-    Write-Host "Erro ao executar AsBuilt: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Erro ao executar AsBuilt:" -ForegroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    Read-Host "Pressione ENTER para sair"
 }
