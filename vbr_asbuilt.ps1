@@ -1020,6 +1020,23 @@ $onlineInstallEnabled = $false
 
 if ($internetAvailable) {
     Write-Log "Internet disponível para operações online" "INFO" 1
+
+        # ---------------- VERSION CHECK (SILENCIOSO) ----------------
+        try {
+            $repo = "julianscunha/Veeam.VBR.ASBuilt"
+            $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -TimeoutSec 3 -ErrorAction Stop
+    
+            $latestVersion = $release.tag_name
+    
+            if ($latestVersion -and $latestVersion -ne $ScriptVersion) {
+                Write-Host ""
+                Write-Host ("Nova versão disponível: {0} (atual: {1})" -f $latestVersion, $ScriptVersion) -ForegroundColor Yellow
+            }
+        }
+        catch {
+            # totalmente silencioso (sem internet, timeout, erro API, etc)
+        }
+    
     Update-Summary -Key "Connectivity" -Value "OK"
     $onlineInstallEnabled = Validate-PowerShellGetAndGallery
     if ($onlineInstallEnabled) {
