@@ -69,11 +69,16 @@ try {
     $scriptBlock = [ScriptBlock]::Create($scriptContent)
 
     # 🔥 parâmetros reais (binding correto)
-    $invokeParams = @{}
+$invokeParams = @{}
 
-    if ($Mode)        { $invokeParams["Mode"] = $Mode }
-    if ($OutputPath)  { $invokeParams["OutputPath"] = $OutputPath }
-    if ($ModulesPath) { $invokeParams["ModulesPath"] = $ModulesPath }
+# defaults seguros
+if (-not $OutputPath)  { $OutputPath  = Join-Path $currentPath "report" }
+if (-not $ModulesPath) { $ModulesPath = Join-Path $currentPath "modules" }
+
+$invokeParams["OutputPath"]  = $OutputPath
+$invokeParams["ModulesPath"] = $ModulesPath
+
+if ($Mode) { $invokeParams["Mode"] = $Mode }
 
     & $scriptBlock @invokeParams
 }
