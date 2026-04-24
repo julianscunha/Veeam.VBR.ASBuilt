@@ -8,6 +8,24 @@ param(
     [string]$Version = "latest"
 )
 
+if (-not $Mode) {
+    Write-Host ""
+    Write-Host "Selecione o modo de execução:" -ForegroundColor Cyan
+    Write-Host "1 - Execução completa (relatório)"
+    Write-Host "2 - Somente download de pacotes"
+
+    $choice = Read-Host "Opção [1/2]"
+
+    switch ($choice) {
+        "1" { $Mode = "Full" }
+        "2" { $Mode = "DownloadOnly" }
+        default {
+            Write-Host "Opção inválida. Usando modo Full." -ForegroundColor Yellow
+            $Mode = "Full"
+        }
+    }
+}
+
 $ErrorActionPreference = "Stop"
 
 $repo = "julianscunha/Veeam.VBR.ASBuilt"
