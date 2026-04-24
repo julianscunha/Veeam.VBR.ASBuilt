@@ -5,8 +5,10 @@ param(
     [string]$Version = "latest"
 )
 
-$ErrorActionPreference = "Stop"
+# 🔥 CRÍTICO: evita erro de assinatura (RemoteSigned)
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
+$ErrorActionPreference = "Stop"
 
 $repo = "julianscunha/Veeam.VBR.ASBuilt"
 $currentPath = Get-Location
@@ -112,7 +114,7 @@ if ($hasInternet) {
 
             Move-Item $tempFile $scriptPath -Force
 
-            # 🔥 Desbloqueia o arquivo baixado (evita bloqueio do Windows)
+            # 🔥 IMPORTANTE: desbloqueia arquivo baixado
             Unblock-File -Path $scriptPath -ErrorAction SilentlyContinue
         }
 
@@ -123,7 +125,7 @@ if ($hasInternet) {
 }
 
 # ---------------- OFFLINE ----------------
-# silencioso (como você pediu)
+# (silencioso como definido)
 
 # ---------------- VALIDA SCRIPT ----------------
 if (-not (Test-Path $scriptPath)) {
