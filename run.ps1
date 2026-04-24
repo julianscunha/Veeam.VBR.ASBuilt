@@ -132,4 +132,8 @@ if ($ModulesPath) { $argList += " -ModulesPath `"$ModulesPath`"" }
 Write-Host ""
 Write-Host "Executando AsBuilt..." -ForegroundColor Cyan
 
-powershell $argList
+& $scriptPath @(
+    if ($Mode)        { "-Mode"; $Mode }
+    if ($OutputPath)  { "-OutputPath"; $OutputPath }
+    if ($ModulesPath) { "-ModulesPath"; $ModulesPath }
+)
