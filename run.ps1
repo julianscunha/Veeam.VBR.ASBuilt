@@ -1,11 +1,13 @@
 param(
     [string]$Mode,
-
     [string]$OutputPath,
     [string]$ModulesPath,
-
     [string]$Version = "latest"
 )
+
+# 🔥 Corrige encoding (PowerShell 5 + IEX)
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $ErrorActionPreference = "Stop"
 
@@ -16,7 +18,7 @@ $scriptPath = Join-Path $currentPath "vbr_asbuilt.ps1"
 Write-Host ""
 Write-Host "===== Veeam VBR AsBuilt =====" -ForegroundColor Cyan
 
-# ---------------- INTERAÇÃO ----------------
+# ---------------- VALIDAÇÃO / INTERAÇÃO ----------------
 if (-not $Mode) {
     Write-Host ""
     Write-Host "Selecione o modo de execução:" -ForegroundColor Cyan
@@ -97,7 +99,6 @@ try {
 
     Start-Process powershell -ArgumentList $psArgs -Wait -NoNewWindow
 
-    # ---------------- CONTROLE DE FLUXO ----------------
     if ($Mode -eq "DownloadOnly") {
         Write-Host ""
         Write-Host "Download concluído. Encerrando." -ForegroundColor Green
