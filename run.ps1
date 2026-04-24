@@ -1,6 +1,6 @@
 param(
     [ValidateSet("Full","DownloadOnly")]
-    [string]$Mode = "Full",
+    [string]$Mode,
 
     [string]$OutputPath,
     [string]$ModulesPath,
