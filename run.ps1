@@ -1,4 +1,4 @@
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 param(
     [string]$Mode,
 
@@ -7,7 +7,7 @@ param(
 
     [string]$Version = "latest"
 )
-
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
 
 $repo = "julianscunha/Veeam.VBR.ASBuilt"
