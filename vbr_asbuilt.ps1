@@ -1024,10 +1024,8 @@ if ($internetAvailable) {
         # ---------------- VERSION CHECK (SILENCIOSO) ----------------
         try {
             $repo = "julianscunha/Veeam.VBR.ASBuilt"
-            $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -TimeoutSec 3 -ErrorAction Stop
-    
-            $latestVersion = $release.tag_name
-    
+            $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -TimeoutSec 3 -ErrorAction Stop    
+            $latestVersion = $release.tag_name    
             if ($latestVersion -and $latestVersion -ne $ScriptVersion) {
                 Write-Host ""
                 Write-Host ("Nova versão disponível: {0} (atual: {1})" -f $latestVersion, $ScriptVersion) -ForegroundColor Yellow
