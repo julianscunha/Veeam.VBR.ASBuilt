@@ -11,113 +11,38 @@ $repo = "julianscunha/Veeam.VBR.ASBuilt"
 $currentPath = Get-Location
 $scriptPath = Join-Path $currentPath "vbr_asbuilt.ps1"
 
-# ---------------- INTERNET ----------------
-function Test-InternetConnection {
-    try {
-        $req = [System.Net.WebRequest]::Create("https://api.github.com")
-        $req.Timeout = 3000
-        $res = $req.GetResponse()
-        $res.Close()
-        return $true
-    }
-    catch {
-        return $false
-    }
-}
-
-# ---------------- NORMALIZA VERSÃO ----------------
-function Normalize-Version {
-    param($v)
-    if (-not $v) { return $null }
-    return ($v -replace '^v','').Trim()
-}
-
-# ---------------- VERSÃO LOCAL ----------------
-function Get-LocalScriptVersion {
-    param($Path)
-
-    if (-not (Test-Path $Path)) { return $null }
-
-    try {
-        $content = Get-Content $Path -ErrorAction Stop
-        foreach ($line in $content) {
-            if ($line -match '\$ScriptVersion\s*=\s*"(.+)"') {
-                return $matches[1]
-            }
-        }
-    }
-    catch {}
-
-    return $null
-}
-
 Write-Host ""
 Write-Host "===== Veeam VBR AsBuilt =====" -ForegroundColor Cyan
 
-$hasInternet = Test-InternetConnection
-
 # ---------------- DOWNLOAD / UPDATE ----------------
-if ($hasInternet) {
-
-    try {
-        if ($Version -eq "latest") {
-            $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -TimeoutSec 5
-            $latestVersionRaw = $release.tag_name
-        }
-        else {
-            $latestVersionRaw = $Version
-        }
-
-        $latestVersion = Normalize-Version $latestVersionRaw
-        $baseUrl = "https://raw.githubusercontent.com/$repo/$latestVersionRaw"
-        $downloadUrl = "$baseUrl/vbr_asbuilt.ps1"
-
-        $localVersionRaw = Get-LocalScriptVersion -Path $scriptPath
-        $localVersion = Normalize-Version $localVersionRaw
-
-        $downloadNeeded = $false
-
-        if ($localVersion) {
-            if ($localVersion -ne $latestVersion) {
-
-                Write-Host ""
-                Write-Host "Nova versão disponível: $latestVersionRaw" -ForegroundColor Yellow
-                Write-Host "Versão local: $localVersionRaw" -ForegroundColor Yellow
-
-                $choice = Read-Host "Atualizar? (Y/N)"
-
-                if ($choice -match "^[Yy]") {
-                    $downloadNeeded = $true
-                }
-            }
-        }
-        else {
-            $downloadNeeded = $true
-        }
-
-        if ($downloadNeeded) {
-            Write-Host "Baixando script..." -ForegroundColor Cyan
-
-            $tempFile = Join-Path $currentPath "vbr_asbuilt.tmp.ps1"
-
-            Invoke-WebRequest $downloadUrl -OutFile $tempFile -UseBasicParsing
-
-            if (-not (Test-Path $tempFile)) {
-                throw "Download falhou"
-            }
-
-            Move-Item $tempFile $scriptPath -Force
-        }
-
+try {
+    if ($Version -eq "latest") {
+        $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -TimeoutSec 5
+        $versionTag = $release.tag_name
+    } else {
+        $versionTag = $Version
     }
-    catch {
-        Write-Host "Falha ao verificar versão. Usando versão local." -ForegroundColor DarkGray
+
+    $downloadUrl = "https://raw.githubusercontent.com/$repo/$versionTag/vbr_asbuilt.ps1"
+
+    Write-Host "Verificando/baixando script..." -ForegroundColor DarkGray
+
+    $tempFile = Join-Path $currentPath "vbr_asbuilt.tmp.ps1"
+
+    Invoke-WebRequest $downloadUrl -OutFile $tempFile -UseBasicParsing -ErrorAction Stop
+
+    if (Test-Path $tempFile) {
+        Move-Item $tempFile $scriptPath -Force
+        Write-Host "Script pronto ($versionTag)" -ForegroundColor Green
     }
 }
+catch {
+    Write-Host "Sem internet ou falha no download. Usando versão local..." -ForegroundColor Yellow
+}
 
-# ---------------- VALIDA SCRIPT ----------------
+# ---------------- VALIDA EXISTÊNCIA ----------------
 if (-not (Test-Path $scriptPath)) {
-    Write-Host "Script não encontrado." -ForegroundColor Red
+    Write-Host "Script não encontrado localmente e download falhou." -ForegroundColor Red
     Read-Host "Pressione ENTER para sair"
     exit 1
 }
@@ -150,6 +75,7 @@ try {
     Invoke-Expression "$scriptContent $argString"
 }
 catch {
+    Write-Host ""
     Write-Host "Erro ao executar AsBuilt:" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
     Read-Host "Pressione ENTER para sair"
