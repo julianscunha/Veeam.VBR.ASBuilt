@@ -8,6 +8,16 @@ param(
     [string]$Version = "latest"
 )
 
+$ErrorActionPreference = "Stop"
+
+$repo = "julianscunha/Veeam.VBR.ASBuilt"
+$currentPath = Get-Location
+$scriptPath = Join-Path $currentPath "vbr_asbuilt.ps1"
+
+Write-Host ""
+Write-Host "===== Veeam VBR AsBuilt =====" -ForegroundColor Cyan
+
+# ---------------- INTERAÇÃO ----------------
 if (-not $Mode) {
     Write-Host ""
     Write-Host "Selecione o modo de execução:" -ForegroundColor Cyan
@@ -25,15 +35,6 @@ if (-not $Mode) {
         }
     }
 }
-
-$ErrorActionPreference = "Stop"
-
-$repo = "julianscunha/Veeam.VBR.ASBuilt"
-$currentPath = Get-Location
-$scriptPath = Join-Path $currentPath "vbr_asbuilt.ps1"
-
-Write-Host ""
-Write-Host "===== Veeam VBR AsBuilt =====" -ForegroundColor Cyan
 
 # ---------------- DEFAULT PATHS ----------------
 if (-not $OutputPath)  { $OutputPath  = Join-Path $currentPath "report" }
@@ -65,7 +66,7 @@ catch {
     Write-Host "Modo offline ou falha no download. Usando versão local..." -ForegroundColor Yellow
 }
 
-# ---------------- VALIDA ----------------
+# ---------------- VALIDA EXISTÊNCIA ----------------
 if (-not (Test-Path $scriptPath)) {
     Write-Host "Script não encontrado localmente e download falhou." -ForegroundColor Red
     Read-Host "Pressione ENTER para sair"
@@ -91,6 +92,7 @@ try {
 
     Start-Process powershell -ArgumentList $psArgs -Wait -NoNewWindow
 
+    # ---------------- CONTROLE DE FLUXO ----------------
     if ($Mode -eq "DownloadOnly") {
         Write-Host ""
         Write-Host "Download concluído. Encerrando." -ForegroundColor Green
