@@ -1,6 +1,6 @@
 param(
-    [ValidateSet("Normal","DownloadOnly")]
-    [string]$Mode = "Normal",
+    [ValidateSet("Full","DownloadOnly")]
+    [string]$Mode = "Full",
 
     [string]$OutputPath,
     [string]$ModulesPath,
@@ -21,7 +21,7 @@ Write-Host "===== Veeam VBR AsBuilt =====" -ForegroundColor Cyan
 if (-not $OutputPath)  { $OutputPath  = Join-Path $currentPath "report" }
 if (-not $ModulesPath) { $ModulesPath = Join-Path $currentPath "modules" }
 
-# ---------------- DOWNLOAD / UPDATE ----------------
+# ---------------- DOWNLOAD ----------------
 try {
     if ($Version -eq "latest") {
         $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -TimeoutSec 5
@@ -47,20 +47,11 @@ catch {
     Write-Host "Modo offline ou falha no download. Usando versão local..." -ForegroundColor Yellow
 }
 
-# ---------------- VALIDA EXISTÊNCIA ----------------
+# ---------------- VALIDA ----------------
 if (-not (Test-Path $scriptPath)) {
     Write-Host "Script não encontrado localmente e download falhou." -ForegroundColor Red
     Read-Host "Pressione ENTER para sair"
     exit 1
-}
-
-# ---------------- GARANTE PASTAS ----------------
-if (-not (Test-Path $ModulesPath)) {
-    New-Item -ItemType Directory -Path $ModulesPath | Out-Null
-}
-
-if (-not (Test-Path $OutputPath)) {
-    New-Item -ItemType Directory -Path $OutputPath | Out-Null
 }
 
 # ---------------- EXECUÇÃO ----------------
@@ -77,13 +68,11 @@ try {
         "-ModulesPath", "`"$ModulesPath`""
     )
 
-    # 🔍 debug leve (pode comentar se quiser)
     Write-Host "Args:" -ForegroundColor DarkGray
     Write-Host ($psArgs -join " ") -ForegroundColor DarkGray
 
     Start-Process powershell -ArgumentList $psArgs -Wait -NoNewWindow
 
-    # ---------------- CONTROLE DE FLUXO ----------------
     if ($Mode -eq "DownloadOnly") {
         Write-Host ""
         Write-Host "Download concluído. Encerrando." -ForegroundColor Green
