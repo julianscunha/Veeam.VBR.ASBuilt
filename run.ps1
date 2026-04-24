@@ -64,15 +64,18 @@ Write-Host ""
 Write-Host "Executando AsBuilt..." -ForegroundColor Cyan
 
 try {
+    # 🔥 cria scriptblock (corrige problema de parâmetros)
     $scriptContent = Get-Content $scriptPath -Raw
+    $scriptBlock = [ScriptBlock]::Create($scriptContent)
 
-    $argString = ""
+    # 🔥 parâmetros reais (binding correto)
+    $invokeParams = @{}
 
-    if ($Mode)        { $argString += " -Mode `"$Mode`"" }
-    if ($OutputPath)  { $argString += " -OutputPath `"$OutputPath`"" }
-    if ($ModulesPath) { $argString += " -ModulesPath `"$ModulesPath`"" }
+    if ($Mode)        { $invokeParams["Mode"] = $Mode }
+    if ($OutputPath)  { $invokeParams["OutputPath"] = $OutputPath }
+    if ($ModulesPath) { $invokeParams["ModulesPath"] = $ModulesPath }
 
-    Invoke-Expression "$scriptContent $argString"
+    & $scriptBlock @invokeParams
 }
 catch {
     Write-Host ""
