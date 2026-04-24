@@ -1,5 +1,4 @@
 param(
-    [ValidateSet("Full","DownloadOnly")]
     [string]$Mode,
 
     [string]$OutputPath,
