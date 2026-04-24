@@ -153,7 +153,7 @@ if ($OutputPath)  { $arguments += "-OutputPath";  $arguments += $OutputPath }
 if ($ModulesPath) { $arguments += "-ModulesPath"; $arguments += $ModulesPath }
 
 try {
-    & $scriptPath @arguments
+    powershell -ExecutionPolicy Bypass -File $scriptPath @arguments
 }
 catch {
     Write-Host "Erro ao executar AsBuilt: $($_.Exception.Message)" -ForegroundColor Red
