@@ -1,3 +1,4 @@
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 param(
     [string]$Mode,
     [string]$OutputPath,
@@ -153,7 +154,7 @@ if ($OutputPath)  { $arguments += "-OutputPath";  $arguments += $OutputPath }
 if ($ModulesPath) { $arguments += "-ModulesPath"; $arguments += $ModulesPath }
 
 try {
-    powershell -ExecutionPolicy Bypass -File $scriptPath @arguments
+    & $scriptPath @arguments
 }
 catch {
     Write-Host "Erro ao executar AsBuilt: $($_.Exception.Message)" -ForegroundColor Red
