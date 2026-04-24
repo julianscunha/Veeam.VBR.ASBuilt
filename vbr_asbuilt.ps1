@@ -62,8 +62,7 @@ Shows detailed help.
 .NOTES
 Author  : Juliano Cunha
 GitHub  : https://github.com/julianscunha
-Version : 1.0.4
-Date    : 2026-04-17
+
 
 .REQUIREMENTS
 - Windows PowerShell 5.1 or PowerShell 7+
