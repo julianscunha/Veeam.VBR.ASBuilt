@@ -62,10 +62,10 @@ try {
     $psArgs = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
-        "-File", "`"$scriptPath`"",
-        "-Mode", "`"$Mode`"",
-        "-OutputPath", "`"$OutputPath`"",
-        "-ModulesPath", "`"$ModulesPath`""
+        "-File", $scriptPath,
+        "-Mode", $Mode,
+        "-OutputPath", $OutputPath,
+        "-ModulesPath", $ModulesPath
     )
 
     Write-Host "Args:" -ForegroundColor DarkGray
