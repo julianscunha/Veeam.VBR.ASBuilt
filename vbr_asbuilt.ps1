@@ -1201,7 +1201,6 @@ catch {
             Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha ao validar Veeam local: {0}" -f $_.Exception.Message)
         }
 
-    }
     else {
 
         Write-Log ("Execução remota detectada - servidor: {0}" -f $VBRServer) "INFO" 2
