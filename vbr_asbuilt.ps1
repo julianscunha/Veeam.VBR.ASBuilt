@@ -1227,7 +1227,6 @@ catch {
             Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha na conexão remota: {0}" -f $_.Exception.Message)
         }
     }
-}
 
 Update-Summary -Key "VeeamConnection" -Value "OK"
 
