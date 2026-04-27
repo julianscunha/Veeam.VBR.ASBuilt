@@ -162,6 +162,32 @@ function Write-Log {
     $line | Out-File -FilePath $logFile -Append -Encoding utf8
 }
 
+function Test-TcpPort {
+    param(
+        [Parameter(Mandatory)][string]$Server,
+        [Parameter(Mandatory)][int]$Port,
+        [int]$TimeoutMs = 3000
+    )
+
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $iar = $client.BeginConnect($Server, $Port, $null, $null)
+
+        $wait = $iar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)
+
+        if (-not $wait) {
+            $client.Close()
+            return $false
+        }
+
+        $client.EndConnect($iar)
+        $client.Close()
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
 
 function Import-VeeamPowerShell {
     Write-Log "Importando PowerShell do Veeam" "INFO" 1
@@ -1206,9 +1232,9 @@ catch {
         Write-Log ("Execução remota detectada - servidor: {0}" -f $VBRServer) "INFO" 2
 
         try {
-            $test = Test-NetConnection $VBRServer -Port 9392 -WarningAction SilentlyContinue
-
-            if (-not $test.TcpTestSucceeded) {
+            $portOk = Test-TcpPort -Server $VBRServer -Port 9392 -TimeoutMs 3000
+            
+            if (-not $portOk) {
                 Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Porta 9392 inacessível no servidor {0}" -f $VBRServer)
             }
 
