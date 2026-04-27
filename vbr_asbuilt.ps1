@@ -1166,15 +1166,67 @@ if (-not (Get-Command Get-VBRServer -ErrorAction SilentlyContinue)) {
 Write-Log "PowerShell Veeam funcional" "SUCCESS" 1
 Update-Summary -Key "VeeamPowerShell" -Value "OK"
 
-Write-Log "Conexão com Veeam" "INFO" 0
+Write-Log "Validando conexão com Veeam" "INFO" 1
+
 try {
-    Connect-VBRServer -Server $VBRServer | Out-Null
-    Write-Log ("Conectado ao servidor Veeam: {0}" -f $VBRServer) "SUCCESS" 1
-    Update-Summary -Key "VeeamConnection" -Value "OK"
+    $session = Get-VBRServerSession
 }
 catch {
-    Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha na conexão: {0}" -f $_.Exception.Message)
+    $session = $null
 }
+
+if ($session) {
+    Write-Log "Sessão VBR já ativa - reutilizando conexão" "SUCCESS" 2
+}
+else {
+    $localNames = @(
+        "localhost",
+        $env:COMPUTERNAME,
+        "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
+    )
+
+    if ($localNames -contains $VBRServer) {
+
+        Write-Log "Execução local detectada" "INFO" 2
+
+        try {
+            Get-VBRServer -ErrorAction Stop | Out-Null
+            Write-Log "Acesso local ao Veeam validado" "SUCCESS" 2
+        }
+        catch {
+            Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha ao validar Veeam local: {0}" -f $_.Exception.Message)
+        }
+
+    }
+    else {
+
+        Write-Log ("Execução remota detectada - servidor: {0}" -f $VBRServer) "INFO" 2
+
+        try {
+            $test = Test-NetConnection $VBRServer -Port 9392 -WarningAction SilentlyContinue
+
+            if (-not $test.TcpTestSucceeded) {
+                Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Porta 9392 inacessível no servidor {0}" -f $VBRServer)
+            }
+
+            $Credential = Get-Credential -Message ("Informe credenciais para conectar ao Veeam ({0})" -f $VBRServer)
+
+            Connect-VBRServer -Server $VBRServer -Credential $Credential -ErrorAction Stop
+
+            $sessionCheck = Get-VBRServerSession
+            if (-not $sessionCheck) {
+                Stop-WithFailure -SummaryKey "VeeamConnection" -Message "Sessão não foi estabelecida após conexão"
+            }
+
+            Write-Log "Conectado remotamente ao Veeam" "SUCCESS" 2
+        }
+        catch {
+            Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha na conexão remota: {0}" -f $_.Exception.Message)
+        }
+    }
+}
+
+Update-Summary -Key "VeeamConnection" -Value "OK"
 
 Write-Log "Validação da versão do Veeam" "INFO" 0
 try {
