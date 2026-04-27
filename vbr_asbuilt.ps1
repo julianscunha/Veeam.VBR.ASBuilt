@@ -230,7 +230,15 @@ function Confirm-Action {
 }
 
 function Pause-End {
-    Read-Host "Pressione ENTER para finalizar"
+    # Só pausa se estiver em execução interativa real
+    if ($Host.Name -eq "ConsoleHost" -and -not $env:CI) {
+        try {
+            Read-Host "Pressione ENTER para finalizar"
+        }
+        catch {
+            # ignora erro em ambientes não interativos
+        }
+    }
 }
 
 function Update-Summary {
@@ -310,7 +318,7 @@ function Test-InternetConnectivity {
 
     foreach ($target in $targets) {
         try {
-            Invoke-WebRequest -Uri $target -UseBasicParsing -TimeoutSec 5 | Out-Null
+            Invoke-WebRequest -Uri $target -UseBasicParsing -TimeoutSec 4 | Out-Null
             return $true
         }
         catch {
