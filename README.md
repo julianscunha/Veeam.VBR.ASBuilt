@@ -59,6 +59,9 @@ This script was designed to:
 - Clear handling of Veeam v13 limitations in the official AsBuiltReport.Veeam.VBR module
 - Safer user experience with explicit prompts before major actions
 - Dedicated `DownloadOnly` mode to prepare offline packages
+- Network connectivity validation with controlled timeout before remote Veeam connection
+- Intelligent Veeam connection handling
+- Custom TCP connectivity validation with configurable timeout for improved execution predictability
 
 ## Requirements
 
@@ -139,11 +142,13 @@ Get-Help .\vbr_asbuilt.ps1 -Detailed
 8. Install missing modules online or offline
 9. Import modules in controlled dependency order
 10. Validate and load Veeam PowerShell
-11. Connect to the target VBR server
-12. Detect and validate the Veeam version
-13. Prompt for output directory and generate the report JSON config
-14. Execute the AsBuilt report
-15. Write final summary to the log
+11. Reuses existing sessions when available
+12. Validates local execution without forcing a connection
+13. Performs controlled remote connection with connectivity validation and credential prompt
+14. Detect and validate the Veeam version
+15. Prompt for output directory and generate the report JSON config
+16. Execute the AsBuilt report
+17. Write final summary to the log
 
 ## Parameters
 
@@ -211,6 +216,7 @@ Then it attempts to install any missing or outdated modules directly from PSGall
 If internet access is available, the script can run in `DownloadOnly` mode.
 
 This mode downloads all required modules to the offline package folder without executing the report workflow.
+In `DownloadOnly` mode, non-executed runtime stages are marked as `SKIPPED` in the final summary.
 
 It also prepares the **NuGet provider** for offline use:
 - if the local provider already meets the minimum version, it is exported to the offline package;
@@ -275,6 +281,18 @@ The offline package should also contain:
 ```text
 .\modules\NuGet\<version>\...
 ```
+
+## Veeam Connection Behavior
+
+The script implements intelligent connection handling:
+
+- If an active Veeam session exists, it is reused
+- When running locally on the Veeam server, the script validates access without forcing a new connection
+- When running remotely, the script:
+  - validates network connectivity to port 9392
+  - prompts for credentials
+  - establishes a controlled connection using `Connect-VBRServer`
+- Connection success is always validated before continuing execution
 
 ## Veeam Version Handling
 
@@ -349,6 +367,7 @@ In `DownloadOnly` mode, non-executed runtime stages are marked as `SKIPPED` in t
 - Some modules behave differently between Windows PowerShell Desktop and PowerShell 7
 - `Veeam.Diagrammer` may be skipped in some offline/runtime scenarios without blocking the main report workflow
 - Full offline execution still depends on the behavior of the official AsBuiltReport modules and their interaction with PowerShellGet/PackageManagement in the local environment
+- Interactive prompts may appear in Portuguese depending on the script configuration.
 
 ## Security Considerations
 
