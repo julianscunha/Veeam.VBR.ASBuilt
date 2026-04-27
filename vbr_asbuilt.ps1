@@ -1185,7 +1185,13 @@ else {
         "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
     )
 
-    if ($localNames -contains $VBRServer) {
+    if ($localNames = @(
+    "localhost",
+    $env:COMPUTERNAME,
+    "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
+) | ForEach-Object { $_.ToLower() }
+
+$isLocal = $localNames -contains $VBRServer.ToLower()) {
 
         Write-Log "Execução local detectada" "INFO" 2
 
