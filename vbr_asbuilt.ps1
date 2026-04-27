@@ -83,7 +83,7 @@ param(
     [switch]$SkipVersionPrompt
 )
 
-$ScriptVersion = "v0.1.0"
+$ScriptVersion = "v0.1.1"
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -164,7 +164,62 @@ function Write-Log {
 
 function Write-Section {
     param([Parameter(Mandatory)][string]$Title)
-    Write-Log ("===== {0} =====" -f $Title) "INFO" 0
+    Write-Log ("===== {0}
+
+
+function Initialize-VBRConnection {
+    param(
+        [string]$Server
+    )
+
+    Write-Log "Validando conexão com Veeam" "INFO" 1
+
+    try {
+        $session = Get-VBRServerSession
+    }
+    catch {
+        $session = $null
+    }
+
+    if ($session) {
+        Write-Log "Sessão VBR já ativa - reutilizando conexão" "SUCCESS" 2
+        return $true
+    }
+
+    $localComputer = $env:COMPUTERNAME
+
+    if ([string]::IsNullOrWhiteSpace($Server) -or
+        $Server -eq "localhost" -or
+        $Server -eq $localComputer) {
+
+        Write-Log "Execução local detectada" "INFO" 2
+
+        try {
+
+            Write-Log "Conectado localmente ao VBR" "SUCCESS" 2
+            return $true
+        }
+        catch {
+            Write-Log ("Falha na conexão local: {0}" -f $_.Exception.Message) "ERROR" 2
+            return $false
+        }
+    }
+    else {
+        Write-Log ("Execução remota detectada - servidor: {0}" -f $Server) "INFO" 2
+
+        try {
+
+            Write-Log "Conectado remotamente ao VBR" "SUCCESS" 2
+            return $true
+        }
+        catch {
+            Write-Log ("Falha na conexão remota: {0}" -f $_.Exception.Message) "ERROR" 2
+            return $false
+        }
+    }
+}
+
+ =====" -f $Title) "INFO" 0
 }
 
 function Confirm-Action {
@@ -1138,7 +1193,7 @@ Update-Summary -Key "VeeamPowerShell" -Value "OK"
 
 Write-Log "Conexão com Veeam" "INFO" 0
 try {
-    Connect-VBRServer -Server $VBRServer | Out-Null
+
     Write-Log ("Conectado ao servidor Veeam: {0}" -f $VBRServer) "SUCCESS" 1
     Update-Summary -Key "VeeamConnection" -Value "OK"
 }
