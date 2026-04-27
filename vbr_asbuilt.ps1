@@ -83,7 +83,7 @@ param(
     [switch]$SkipVersionPrompt
 )
 
-$ScriptVersion = "v0.1.2"
+$ScriptVersion = "v0.1.0"
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -160,36 +160,6 @@ function Write-Log {
     }
 
     $line | Out-File -FilePath $logFile -Append -Encoding utf8
-}
-
-
-function Import-VeeamPowerShell {
-    Write-Log "Importando PowerShell do Veeam" "INFO" 1
-
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    } catch {}
-
-    try {
-        Import-Module Veeam.Backup.PowerShell -ErrorAction Stop
-        Write-Log "Módulo Veeam carregado" "SUCCESS" 2
-        return $true
-    }
-    catch {
-        if ($_.Exception.Message -like "*SslOptions*") {
-            Write-Log "Erro TLS detectado (SslOptions). Verifique TLS 1.2, .NET 4.8 e reinicie o servidor." "ERROR" 2
-            Stop-WithFailure -SummaryKey "VeeamPowerShell" -Message "Erro TLS/.NET ao carregar módulo Veeam"
-        }
-
-        try {
-            Add-PSSnapin VeeamPSSnapin -ErrorAction Stop
-            Write-Log "Snap-in Veeam carregado" "SUCCESS" 2
-            return $true
-        }
-        catch {
-            Stop-WithFailure -SummaryKey "VeeamPowerShell" -Message "Falha ao carregar módulo ou snap-in do Veeam"
-        }
-    }
 }
 
 function Write-Section {
