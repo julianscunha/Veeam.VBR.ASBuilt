@@ -83,7 +83,7 @@ param(
     [switch]$SkipVersionPrompt
 )
 
-$ScriptVersion = "v0.1.0"
+$ScriptVersion = "v0.1.1"
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
