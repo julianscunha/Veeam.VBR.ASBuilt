@@ -83,7 +83,7 @@ param(
     [switch]$SkipVersionPrompt
 )
 
-$ScriptVersion = "v0.1.1"
+$ScriptVersion = "v0.1.0"
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -162,64 +162,39 @@ function Write-Log {
     $line | Out-File -FilePath $logFile -Append -Encoding utf8
 }
 
-function Write-Section {
-    param([Parameter(Mandatory)][string]$Title)
-    Write-Log ("===== {0}
 
-
-function Initialize-VBRConnection {
-    param(
-        [string]$Server
-    )
-
-    Write-Log "Validando conexão com Veeam" "INFO" 1
+function Import-VeeamPowerShell {
+    Write-Log "Importando PowerShell do Veeam" "INFO" 1
 
     try {
-        $session = Get-VBRServerSession
-    }
-    catch {
-        $session = $null
-    }
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    } catch {}
 
-    if ($session) {
-        Write-Log "Sessão VBR já ativa - reutilizando conexão" "SUCCESS" 2
+    try {
+        Import-Module Veeam.Backup.PowerShell -ErrorAction Stop
+        Write-Log "Módulo Veeam carregado" "SUCCESS" 2
         return $true
     }
-
-    $localComputer = $env:COMPUTERNAME
-
-    if ([string]::IsNullOrWhiteSpace($Server) -or
-        $Server -eq "localhost" -or
-        $Server -eq $localComputer) {
-
-        Write-Log "Execução local detectada" "INFO" 2
+    catch {
+        if ($_.Exception.Message -like "*SslOptions*") {
+            Write-Log "Erro TLS detectado (SslOptions). Verifique TLS 1.2, .NET 4.8 e reinicie o servidor." "ERROR" 2
+            Stop-WithFailure -SummaryKey "VeeamPowerShell" -Message "Erro TLS/.NET ao carregar módulo Veeam"
+        }
 
         try {
-
-            Write-Log "Conectado localmente ao VBR" "SUCCESS" 2
+            Add-PSSnapin VeeamPSSnapin -ErrorAction Stop
+            Write-Log "Snap-in Veeam carregado" "SUCCESS" 2
             return $true
         }
         catch {
-            Write-Log ("Falha na conexão local: {0}" -f $_.Exception.Message) "ERROR" 2
-            return $false
-        }
-    }
-    else {
-        Write-Log ("Execução remota detectada - servidor: {0}" -f $Server) "INFO" 2
-
-        try {
-
-            Write-Log "Conectado remotamente ao VBR" "SUCCESS" 2
-            return $true
-        }
-        catch {
-            Write-Log ("Falha na conexão remota: {0}" -f $_.Exception.Message) "ERROR" 2
-            return $false
+            Stop-WithFailure -SummaryKey "VeeamPowerShell" -Message "Falha ao carregar módulo ou snap-in do Veeam"
         }
     }
 }
 
- =====" -f $Title) "INFO" 0
+function Write-Section {
+    param([Parameter(Mandatory)][string]$Title)
+    Write-Log ("===== {0} =====" -f $Title) "INFO" 0
 }
 
 function Confirm-Action {
@@ -1193,7 +1168,7 @@ Update-Summary -Key "VeeamPowerShell" -Value "OK"
 
 Write-Log "Conexão com Veeam" "INFO" 0
 try {
-
+    Connect-VBRServer -Server $VBRServer | Out-Null
     Write-Log ("Conectado ao servidor Veeam: {0}" -f $VBRServer) "SUCCESS" 1
     Update-Summary -Key "VeeamConnection" -Value "OK"
 }
