@@ -1175,25 +1175,23 @@ catch {
     $session = $null
 }
 
-if ($session) {
-    Write-Log "Sessão VBR já ativa - reutilizando conexão" "SUCCESS" 2
-}
-else {
-    $localNames = @(
-        "localhost",
-        $env:COMPUTERNAME,
-        "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
-    )
-
-    if ($localNames = @(
-    "localhost",
-    $env:COMPUTERNAME,
-    "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
-) | ForEach-Object { $_.ToLower() }
-
-$isLocal = $localNames -contains $VBRServer.ToLower()) {
-
-        Write-Log "Execução local detectada" "INFO" 2
+        $localNames = @(
+            "localhost",
+            $env:COMPUTERNAME,
+            "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
+        ) | ForEach-Object { $_.ToLower() }
+        
+        $normalizedServer = $VBRServer.ToLower()
+        
+        $isLocal = $localNames -contains $normalizedServer
+        
+        if ($isLocal) {
+            Write-Log "Execução local detectada" "INFO" 2
+        }
+        else {
+            Write-Log "Execução remota detectada" "INFO" 2
+            # aqui entra o Connect-VBRServer
+        }
 
         try {
             Get-VBRServer -ErrorAction Stop | Out-Null
