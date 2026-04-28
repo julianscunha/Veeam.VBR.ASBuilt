@@ -1209,14 +1209,22 @@ catch {
     $session = $null
 }
 
-# 🔥 GATE PRINCIPAL DE DECISÃO
+$validSession = $false
+
 if ($session) {
+    try {
+        Get-VBRServer -ErrorAction Stop | Out-Null
+        $validSession = $true
+    }
+    catch {
+        Write-Log "Sessão existente inválida - será recriada" "WARNING" 2
+    }
+}
 
-    Write-Log "Sessão VBR já ativa - reutilizando conexão" "SUCCESS" 2
-
+if ($validSession) {
+    Write-Log "Sessão VBR válida - reutilizando conexão" "SUCCESS" 2
 }
 else {
-
     $localNames = @(
         "localhost",
         $env:COMPUTERNAME,
