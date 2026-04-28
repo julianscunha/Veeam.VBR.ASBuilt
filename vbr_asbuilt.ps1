@@ -1209,52 +1209,52 @@ catch {
     $session = $null
 }
 
-$localNames = @(
-    "localhost",
-    $env:COMPUTERNAME,
-    "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
-) | ForEach-Object { $_.ToLower() }
+# 🔥 GATE PRINCIPAL DE DECISÃO
+if ($session) {
 
-$normalizedServer = ($VBRServer ?? "").ToLower()
-$isLocal = $localNames -contains $normalizedServer
-
-if ($isLocal) {
-
-    Write-Log "Execução local detectada" "INFO" 2
-
-    try {
-        Get-VBRServer -ErrorAction Stop | Out-Null
-        Write-Log "Acesso local ao Veeam validado" "SUCCESS" 2
-    }
-    catch {
-        Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha ao validar Veeam local: {0}" -f $_.Exception.Message)
-    }
+    Write-Log "Sessão VBR já ativa - reutilizando conexão" "SUCCESS" 2
 
 }
 else {
 
-    Write-Log ("Execução remota detectada - servidor: {0}" -f $VBRServer) "INFO" 2
+    $localNames = @(
+        "localhost",
+        $env:COMPUTERNAME,
+        "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
+    ) | ForEach-Object { $_.ToLower() }
 
-    try {
-        $portOk = Test-TcpPort -Server $VBRServer -Port 9392 -TimeoutMs 3000
-        
-        if (-not $portOk) {
-            Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Porta 9392 inacessível no servidor {0}" -f $VBRServer)
+    $normalizedServer = ($VBRServer ?? "").Trim().ToLower()
+    $isLocal = $localNames -contains $normalizedServer
+
+    if ($isLocal) {
+        Write-Log "Execução local detectada" "INFO" 2
+        try {
+            Get-VBRServer -ErrorAction Stop | Out-Null
+            Write-Log "Acesso local ao Veeam validado" "SUCCESS" 2
         }
-
-        $Credential = Get-Credential -Message ("Informe credenciais para conectar ao Veeam ({0})" -f $VBRServer)
-
-        Connect-VBRServer -Server $VBRServer -Credential $Credential -ErrorAction Stop
-
-        $sessionCheck = Get-VBRServerSession
-        if (-not $sessionCheck) {
-            Stop-WithFailure -SummaryKey "VeeamConnection" -Message "Sessão não foi estabelecida após conexão"
+        catch {
+            Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha ao validar Veeam local: {0}" -f $_.Exception.Message)
         }
-
-        Write-Log "Conectado remotamente ao Veeam" "SUCCESS" 2
     }
-    catch {
-        Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha na conexão remota: {0}" -f $_.Exception.Message)
+    else {
+        Write-Log ("Execução remota detectada - servidor: {0}" -f $VBRServer) "INFO" 2
+        try {
+            $portOk = Test-TcpPort -Server $VBRServer -Port 9392 -TimeoutMs 3000
+
+            if (-not $portOk) {
+                Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Porta 9392 inacessível no servidor {0}" -f $VBRServer)
+            }
+            $Credential = Get-Credential -Message ("Informe credenciais para conectar ao Veeam ({0})" -f $VBRServer)
+            Connect-VBRServer -Server $VBRServer -Credential $Credential -ErrorAction Stop
+            $sessionCheck = Get-VBRServerSession
+            if (-not $sessionCheck) {
+                Stop-WithFailure -SummaryKey "VeeamConnection" -Message "Sessão não foi estabelecida após conexão"
+            }
+            Write-Log "Conectado remotamente ao Veeam" "SUCCESS" 2
+        }
+        catch {
+            Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha na conexão remota: {0}" -f $_.Exception.Message)
+        }
     }
 }
 
