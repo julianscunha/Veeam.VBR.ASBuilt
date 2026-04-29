@@ -1234,7 +1234,7 @@ else {
 
     $normalizedServer = ($VBRServer ?? "").Trim().ToLower()
     $isLocal = $localNames -contains $normalizedServer -or
-                $VBRServer -eq ([System.Net.Dns]::GetHostName())
+                $normalizedServer -eq ([System.Net.Dns]::GetHostName().ToLower())
 
     if ($isLocal) {
         Write-Log "Execução local detectada" "INFO" 2
