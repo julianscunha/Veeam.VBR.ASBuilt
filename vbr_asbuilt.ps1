@@ -1227,12 +1227,14 @@ if ($validSession) {
 else {
     $localNames = @(
         "localhost",
+        "127.0.0.1",
         $env:COMPUTERNAME,
         "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
     ) | ForEach-Object { $_.ToLower() }
 
     $normalizedServer = ($VBRServer ?? "").Trim().ToLower()
-    $isLocal = $localNames -contains $normalizedServer
+    $isLocal = $localNames -contains $normalizedServer -or
+                $VBRServer -eq ([System.Net.Dns]::GetHostName())
 
     if ($isLocal) {
         Write-Log "Execução local detectada" "INFO" 2
