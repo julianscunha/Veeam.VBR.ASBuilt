@@ -379,6 +379,30 @@ function Get-PreferredUserModulePath {
     return $null
 }
 
+function Add-LegacyWindowsPowerShellModulePath {
+    [CmdletBinding()]
+    param()
+
+    # Necessário apenas para PowerShell 7+
+    if ($PSVersionTable.PSEdition -ne 'Core') {
+        return
+    }
+
+    $legacyModulePath = Join-Path $HOME "Documents\WindowsPowerShell\Modules"
+
+    if (-not (Test-Path $legacyModulePath)) {
+        return
+    }
+
+    $modulePaths = $env:PSModulePath -split ';' |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+    if ($modulePaths -notcontains $legacyModulePath) {
+        $env:PSModulePath = "$legacyModulePath;$env:PSModulePath"
+        Write-Log "Adicionado caminho legado de módulos ao PSModulePath: $legacyModulePath" "INFO" 1
+    }
+}
+
 function Validate-PowerShellGetAndGallery {
     Write-Log "Validando PowerShellGet / PSGallery" "INFO" 1
 
@@ -991,7 +1015,12 @@ function Import-ModuleInControlledOrder {
         }
 
         try {
-            Import-Module -Name $name -Force -DisableNameChecking -WarningAction SilentlyContinue -ErrorAction Stop
+            Import-Module -Name $name `
+			-RequiredVersion $moduleDef.RequiredVersion `
+			-Force `
+			-DisableNameChecking `
+			-WarningAction SilentlyContinue `
+			-ErrorAction Stop
             Write-Log ("Importação concluída para {0}" -f $name) "SUCCESS" 2
         }
         catch {
@@ -1056,8 +1085,8 @@ $ModulePresenceBaseline = @(
     @{ Name = "PSGraph";                 RequiredVersion = "2.1.38.27"; RequiredCommands = @() },
     @{ Name = "Diagrammer.Core";         RequiredVersion = "0.2.39";    RequiredCommands = @() },
     @{ Name = "Veeam.Diagrammer";        RequiredVersion = "0.6.34";    RequiredCommands = @(); MinimumPSEdition = "DesktopOnly" },
-    @{ Name = "AsBuiltReport.Core";      RequiredVersion = "1.6.2";     RequiredCommands = @("New-AsBuiltReport", "New-AsBuiltReportConfig") },
-    @{ Name = "AsBuiltReport.Veeam.VBR"; RequiredVersion = "0.8.26";    RequiredCommands = @() }
+    @{ Name = "AsBuiltReport.Core";      RequiredVersion = "1.6.4";     RequiredCommands = @("New-AsBuiltReport", "New-AsBuiltReportConfig") },
+    @{ Name = "AsBuiltReport.Veeam.VBR"; RequiredVersion = "1.0.3";     RequiredCommands = @() }
 )
 
 $ModuleImportOrder = @(
@@ -1066,8 +1095,8 @@ $ModuleImportOrder = @(
     @{ Name = "PSGraph";                 RequiredVersion = "2.1.38.27"; RequiredCommands = @() },
     @{ Name = "Diagrammer.Core";         RequiredVersion = "0.2.39";    RequiredCommands = @() },
     @{ Name = "Veeam.Diagrammer";        RequiredVersion = "0.6.34";    RequiredCommands = @(); MinimumPSEdition = "DesktopOnly" },
-    @{ Name = "AsBuiltReport.Core";      RequiredVersion = "1.6.2";     RequiredCommands = @("New-AsBuiltReport", "New-AsBuiltReportConfig") },
-    @{ Name = "AsBuiltReport.Veeam.VBR"; RequiredVersion = "0.8.26";    RequiredCommands = @() }
+    @{ Name = "AsBuiltReport.Core";      RequiredVersion = "1.6.4";     RequiredCommands = @("New-AsBuiltReport", "New-AsBuiltReportConfig") },
+    @{ Name = "AsBuiltReport.Veeam.VBR"; RequiredVersion = "1.0.3";     RequiredCommands = @() }
 )
 
 Write-Log "Validação do PowerShell" "INFO" 0
@@ -1123,15 +1152,27 @@ else {
         Stop-WithFailure -SummaryKey "Connectivity" -Message "Modo DownloadOnly requer acesso à internet."
     }
 }
-
 Write-Log "Validação do NuGet provider" "INFO" 0
-$nugetOk = Ensure-NuGetProviderPresent -RequiredVersion $NuGetMinimumVersion -InternetAvailable $internetAvailable -OnlineInstallEnabled $onlineInstallEnabled -OfflineRoot $offlineModulesRoot
+$nugetOk = Ensure-NuGetProviderPresent `
+    -RequiredVersion $NuGetMinimumVersion `
+    -InternetAvailable $internetAvailable `
+    -OnlineInstallEnabled $onlineInstallEnabled `
+    -OfflineRoot $offlineModulesRoot
+
 if (-not $nugetOk) {
     Stop-WithFailure -SummaryKey "NuGetGallery" -Message "Falha na validação/promoção do NuGet provider."
 }
 
+# Compatibilidade PowerShell 5.1 -> PowerShell 7
+Add-LegacyWindowsPowerShellModulePath
+
 Write-Log "Validação de presença dos módulos AsBuilt" "INFO" 0
-$presenceOk = Ensure-AllModulesPresent -ModuleDefinitions $ModulePresenceBaseline -InternetAvailable $internetAvailable -OnlineInstallEnabled $onlineInstallEnabled -OfflineRoot $offlineModulesRoot
+$presenceOk = Ensure-AllModulesPresent `
+    -ModuleDefinitions $ModulePresenceBaseline `
+    -InternetAvailable $internetAvailable `
+    -OnlineInstallEnabled $onlineInstallEnabled `
+    -OfflineRoot $offlineModulesRoot
+
 if (-not $presenceOk) {
     Stop-WithFailure -SummaryKey "Modules" -Message "Falha na validação ou instalação dos módulos necessários."
 }
@@ -1325,13 +1366,18 @@ else {
 
     if ($isLocal) {
         Write-Log "Execução local detectada" "INFO" 2
-        try {
-            Get-VBRServer -ErrorAction Stop | Out-Null
-            Write-Log "Acesso local ao Veeam validado" "SUCCESS" 2
-        }
-        catch {
-            Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha ao validar Veeam local: {0}" -f $_.Exception.Message)
-        }
+			try {
+				Write-Log "Estabelecendo conexão local com o Veeam..." "INFO" 2
+
+				Connect-VBRServer -Server $VBRServer -ErrorAction Stop | Out-Null
+
+				Get-VBRServer -ErrorAction Stop | Out-Null
+
+				Write-Log "Acesso local ao Veeam validado" "SUCCESS" 2
+			}
+			catch {
+				Stop-WithFailure -SummaryKey "VeeamConnection" -Message ("Falha ao validar Veeam local: {0}" -f $_.Exception.Message)
+			}
     }
     else {
         Write-Log ("Execução remota detectada - servidor: {0}" -f $VBRServer) "INFO" 2
@@ -1448,16 +1494,18 @@ if (-not $internetAvailable) {
     }
 }
 
+$credential = [System.Management.Automation.PSCredential]::new($username, $password)
+
 Write-Log "Execução do AsBuiltReport" "INFO" 0
 try {
-    New-AsBuiltReport `
-        -Report Veeam.VBR `
-        -Target $target `
-        -Username $username `
-        -Password $password `
-        -OutputPath $output `
-        -ReportConfigPath $reportConfigPath `
-        -Format Word,HTML
+	New-AsBuiltReport `
+		-Report Veeam.VBR `
+		-Target $target `
+		-Credential $credential `
+		-OutputFolderPath $output `
+		-ReportConfigFilePath $reportConfigPath `
+		-Format Word,HTML `
+#		-Verbose 4>&1 | Tee-Object -FilePath $LogFile -Append
 
     Write-Log "Relatório gerado com sucesso" "SUCCESS" 1
     Update-Summary -Key "ReportExecution" -Value "OK"
@@ -1466,14 +1514,21 @@ try {
 }
 catch {
     $message = $_.Exception.Message
+	
+	Write-Log ("Exceção completa: {0}" -f $_) "ERROR" 1
+    Write-Log ("Mensagem original do módulo: {0}" -f $message) "ERROR" 1
 
-    if ($message -match "Veeam Backup & Replication v13 in any variant \(Windows or Appliance\) is not supported") {
-        Write-Log "O ambiente foi validado com sucesso, porém o módulo oficial AsBuiltReport.Veeam.VBR bloqueia a execução em Veeam v13." "ERROR" 1
-        Write-Log "A falha não está relacionada a conectividade, módulos ou PowerShell. Trata-se de uma limitação funcional do report oficial." "ERROR" 1
-        Update-Summary -Key "ReportExecution" -Value "FAILED"
-        Update-Summary -Key "FinalStatus" -Value "FAILED"
-        Update-Summary -Key "FinalMessage" -Value "Bloqueio funcional do módulo oficial AsBuiltReport.Veeam.VBR para Veeam v13."
-    }
+	if ($message -match "Veeam Backup & Replication v13 in any variant \(Windows or Appliance\) is not supported") {
+
+		Write-Log "O ambiente foi validado com sucesso e o wrapper executou corretamente." "ERROR" 1
+		Write-Log "A execução foi interrompida pelo módulo oficial AsBuiltReport.Veeam.VBR instalado localmente." "ERROR" 1
+		Write-Log "A versão atualmente instalada do módulo ainda contém a restrição para Veeam Backup & Replication v13." "ERROR" 1
+		Write-Log "Atualize o módulo AsBuiltReport.Veeam.VBR para a versão 1.0.3 ou superior e execute novamente." "ERROR" 1
+
+		Update-Summary -Key "ReportExecution" -Value "FAILED"
+		Update-Summary -Key "FinalStatus" -Value "FAILED"
+		Update-Summary -Key "FinalMessage" -Value "Módulo AsBuiltReport.Veeam.VBR desatualizado. Atualize para a versão 1.0.3 ou superior."
+	}
     else {
         Write-Log ("Erro na execução: {0}" -f $message) "ERROR" 1
         Update-Summary -Key "ReportExecution" -Value "FAILED"
