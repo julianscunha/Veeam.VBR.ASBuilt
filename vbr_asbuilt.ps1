@@ -1,12 +1,4 @@
-﻿
-# ---------------------------------------------------------------------------
-# v0.1.2 maintenance update
-# - Documentation aligned with upstream AsBuiltReport.Veeam.VBR support matrix.
-# - VBR v13 considered supported (PowerShell 7 recommended).
-# - Wrapper no longer assumes v13 incompatibility.
-# ---------------------------------------------------------------------------
-
-<#
+﻿<#
 .SYNOPSIS
 Automates deployment, validation and execution of AsBuiltReport for Veeam Backup & Replication.
 
@@ -1152,19 +1144,106 @@ if (-not $importOk) {
 Update-Summary -Key "Modules" -Value "OK"
 
 Write-Log "Carregamento do Veeam" "INFO" 0
-$veeamDll = "C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell.dll"
-
-if (-not (Test-Path $veeamDll)) {
-    Stop-WithFailure -SummaryKey "VeeamPowerShell" -Message ("DLL do Veeam não encontrada: {0}" -f $veeamDll)
-}
+# Primeiro tenta usar o módulo PowerShell registrado (VBR v13+)
+$veeamModule = Get-Module -ListAvailable -Name Veeam.Backup.PowerShell |
+    Sort-Object Version -Descending |
+    Select-Object -First 1
 
 try {
     Write-Log ("PowerShell Edition: {0}" -f $PSEdition) "INFO" 1
     Write-Log ("PowerShell Version: {0}" -f $PSVersionTable.PSVersion) "INFO" 1
-    Write-Log ("DLL do Veeam: {0}" -f $veeamDll) "INFO" 1
 
-    Import-Module $veeamDll -ErrorAction Stop -DisableNameChecking -WarningAction SilentlyContinue
-    Write-Log "DLL carregada com sucesso" "SUCCESS" 1
+    if ($veeamModule) {
+
+        Write-Log ("Módulo Veeam encontrado: {0}" -f $veeamModule.ModuleBase) "INFO" 1
+
+        # O módulo do VBR v13 exige PowerShell 7
+        if ($PSVersionTable.PSVersion.Major -lt 7) {
+
+            $pwsh = "C:\Program Files\PowerShell\7\pwsh.exe"
+
+            if (Test-Path $pwsh) {
+                Write-Log "Módulo Veeam requer PowerShell 7. Reiniciando execução..." "INFO" 1
+
+                Update-Summary -Key "VeeamPowerShell" -Value "WARNING"
+
+				# Obtém o caminho absoluto do script atual (compatível com PS 5.1 e 7)
+				if ($PSCommandPath) {
+					$scriptPath = $PSCommandPath
+				}
+				elseif ($MyInvocation.MyCommand.Path) {
+					$scriptPath = $MyInvocation.MyCommand.Path
+				}
+				else {
+					$scriptPath = $MyInvocation.InvocationName
+				}
+				Write-Log ("ScriptPath: {0}" -f $scriptPath) "INFO" 1
+				$scriptPath = (Resolve-Path $scriptPath).ProviderPath
+
+				# Monta a linha de comando
+				$arguments = @(
+					'-NoProfile'
+					'-ExecutionPolicy'
+					'Bypass'
+					'-File'
+					$scriptPath
+					'-relaunched'
+					'1'
+				)
+
+				if ($VBRServer) {
+					$arguments += @('-VBRServer', ('"{0}"' -f $VBRServer))
+				}
+
+				if ($Mode) {
+					$arguments += @('-Mode', $Mode)
+				}
+
+				if ($ModulesPath) {
+					$arguments += @('-ModulesPath', ('"{0}"' -f $ModulesPath))
+				}
+
+				if ($OutputPath) {
+					$arguments += @('-OutputPath', ('"{0}"' -f $OutputPath))
+				}
+
+				Write-Log ("Iniciando PowerShell 7: {0}" -f $pwsh) "INFO" 1
+				Write-Log ("Argumentos: {0}" -f ($arguments -join ' ')) "INFO" 1
+
+				$proc = Start-Process `
+					-FilePath $pwsh `
+					-ArgumentList $arguments `
+					-Wait `
+					-PassThru `
+					-NoNewWindow
+
+				Write-Log ("PowerShell 7 finalizado com ExitCode: {0}" -f $proc.ExitCode) "INFO" 1
+
+				exit
+            }
+            else {
+                Stop-WithFailure -SummaryKey "VeeamPowerShell" -Message "Veeam Backup & Replication v13 requer PowerShell 7. Instale o PowerShell 7 e execute novamente."
+            }
+        }
+
+        Import-Module Veeam.Backup.PowerShell -ErrorAction Stop -DisableNameChecking -WarningAction SilentlyContinue
+        Write-Log "Módulo Veeam carregado com sucesso" "SUCCESS" 1
+    }
+    else {
+
+        # Compatibilidade com instalações legadas
+        $veeamDll = "C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell.dll"
+
+        if (-not (Test-Path $veeamDll)) {
+            Stop-WithFailure -SummaryKey "VeeamPowerShell" -Message (
+                "Veeam PowerShell não encontrado. Instale o Veeam Backup & Replication Console ou o módulo Veeam.Backup.PowerShell."
+            )
+        }
+
+        Write-Log ("DLL do Veeam: {0}" -f $veeamDll) "INFO" 1
+        Import-Module $veeamDll -ErrorAction Stop -DisableNameChecking -WarningAction SilentlyContinue
+        Write-Log "DLL do Veeam carregada com sucesso" "SUCCESS" 1
+    }
 }
 catch {
     Write-Log ("Falha ao carregar DLL do Veeam: {0}" -f $_.Exception.Message) "WARNING" 1
@@ -1297,7 +1376,7 @@ try {
     }
 
     if ($ver.Major -ge 13) {
-        Write-Log "Versão 13+ detectada. O README oficial do report marca Veeam v13 como não suportado e indica compatibilidade do report apenas com Windows PowerShell 5.1." "WARNING" 1
+        Write-Log "Versão 13+ detectada. O módulo oficial AsBuiltReport.Veeam.VBR já oferece suporte ao VBR v13. Para esta versão, recomenda-se a execução em PowerShell 7, requisito já atendido nesta sessão." "INFO" 1
         Update-Summary -Key "VeeamVersion" -Value "WARNING"
         if (-not $SkipVersionPrompt) {
             if (-not (Confirm-Action "Deseja continuar mesmo assim?")) {
