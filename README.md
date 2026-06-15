@@ -405,7 +405,7 @@ In `DownloadOnly` mode, non-executed runtime stages are marked as `SKIPPED` in t
 
 ## Limitations
 
-- The official `AsBuiltReport.Veeam.VBR` report currently does not support Veeam Backup & Replication v13
+- The official `AsBuiltReport.Veeam.VBR` module supports Veeam Backup & Replication v13. PowerShell 7 is recommended for VBR v13 environments
 - The script is interactive by design
 - The script assumes the Veeam console components are installed and available on the execution host
 - Some modules behave differently between Windows PowerShell Desktop and PowerShell 7
@@ -504,3 +504,11 @@ All trademarks and product names are the property of their respective owners.
 ## License
 
 MIT — see the LICENSE file
+
+
+## Veeam Version Handling Update
+
+- VBR lower than v12: execution is blocked.
+- VBR v12.x: execution continues normally.
+- VBR v13.x: officially supported by the upstream AsBuiltReport.Veeam.VBR project. PowerShell 7 is recommended.
+

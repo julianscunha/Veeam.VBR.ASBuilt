@@ -1,4 +1,12 @@
-﻿<#
+﻿
+# ---------------------------------------------------------------------------
+# v0.1.2 maintenance update
+# - Documentation aligned with upstream AsBuiltReport.Veeam.VBR support matrix.
+# - VBR v13 considered supported (PowerShell 7 recommended).
+# - Wrapper no longer assumes v13 incompatibility.
+# ---------------------------------------------------------------------------
+
+<#
 .SYNOPSIS
 Automates deployment, validation and execution of AsBuiltReport for Veeam Backup & Replication.
 
@@ -73,7 +81,6 @@ GitHub  : https://github.com/julianscunha
 MIT License
 #>
 
-[CmdletBinding()]
 param(
     [int]$relaunched = 0,
     [string]$VBRServer = "localhost",
@@ -84,9 +91,8 @@ param(
     [switch]$SkipVersionPrompt
 )
 
-$ScriptVersion = "v0.1.2"
+$ScriptVersion = "v0.1.1"
 
-Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $ConfirmPreference = 'None'
@@ -1234,7 +1240,7 @@ else {
         "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
     ) | ForEach-Object { $_.ToLower() }
 
-    $normalizedServer = (("" + $VBRServer).Trim().ToLower())
+    $normalizedServer = "$VBRServer".Trim().ToLower()
     $isLocal = $localNames -contains $normalizedServer -or
                 $normalizedServer -eq ([System.Net.Dns]::GetHostName().ToLower())
 
