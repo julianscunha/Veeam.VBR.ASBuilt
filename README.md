@@ -5,7 +5,11 @@
 ![Repository](https://img.shields.io/badge/Repository-GitHub-black)
 ![Language](https://img.shields.io/badge/Language-PowerShell-blueviolet)
 ![Status](https://img.shields.io/badge/Status-Stable-success)
-![Last Updated](https://img.shields.io/badge/Last%20Updated-2026--04--17-informational)
+![Last Updated](https://img.shields.io/badge/Last%20Updated-2026--06--15-informational)
+
+
+> **Current Version:** `v0.1.2`  
+> Wrapper and orchestration layer for the official AsBuiltReport ecosystem, providing improved validation, compatibility, logging, online/offline module management and intelligent Veeam connection handling.
 
 ## Overview
 
@@ -19,6 +23,39 @@ The script was built to provide a guided and logged workflow for environments th
 - online environments with PSGallery access
 - offline environments using pre-staged modules
 - Veeam Backup & Replication v12.x and v13.x validation scenarios
+
+
+
+## What's New in v0.1.2
+
+Version **v0.1.2** focuses on improving execution reliability, cross-version compatibility and long-term maintainability.
+
+### Highlights
+
+- Official support for **Windows PowerShell 5.1** and **PowerShell 7+**
+- Improved internal compatibility by removing PowerShell 7-only syntax
+- Enhanced runtime validation using `Set-StrictMode -Version Latest`
+- Standard advanced function support through `CmdletBinding()`
+- Improved hostname and FQDN normalization for local and remote execution scenarios
+- Better handling of null and uninitialized variables
+- Refined execution flow to provide more predictable behavior across different environments
+- Fully backward compatible with existing usage
+
+## Compatibility & Runtime Behavior
+
+The script is designed and validated for both supported PowerShell runtimes.
+
+| Runtime | Status |
+|----------|--------|
+| Windows PowerShell 5.1 | Supported |
+| PowerShell 7+ | Supported |
+
+Key compatibility improvements:
+- Removal of PowerShell 7-only syntax.
+- Improved null and variable handling.
+- Enhanced hostname/FQDN normalization.
+- Standardized runtime validation and parameter processing.
+
 
 ## Relationship with AsBuiltReport Project
 
@@ -62,6 +99,13 @@ This script was designed to:
 - Network connectivity validation with controlled timeout before remote Veeam connection
 - Intelligent Veeam connection handling
 - Custom TCP connectivity validation with configurable timeout for improved execution predictability
+
+- Native support for both Windows PowerShell 5.1 and PowerShell 7+
+- Advanced PowerShell parameter handling through CmdletBinding()
+- Strict runtime validation using Set-StrictMode
+- Cross-version compatible execution logic
+- Improved hostname and local/remote execution detection
+- Enhanced internal validation to reduce unexpected runtime failures
 
 ## Requirements
 
@@ -437,6 +481,25 @@ This project is not affiliated with or officially endorsed by:
 - Veeam Software  
 
 All trademarks and product names are the property of their respective owners.
+
+
+
+## Recent Changes
+
+### v0.1.2
+- Improved PowerShell 5.1 and 7+ compatibility
+- Added advanced function support (`CmdletBinding()`)
+- Added strict runtime validation (`Set-StrictMode`)
+- Enhanced hostname normalization and null handling
+- Improved internal execution reliability and maintainability
+- Updated documentation and release notes
+
+### v0.1.1
+- Enhanced Veeam connection handling
+- Added network connectivity validation before remote authentication
+- Implemented custom TCP connectivity checks
+- Improved connection workflow reliability
+
 
 ## License
 
