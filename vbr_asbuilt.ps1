@@ -73,6 +73,7 @@ GitHub  : https://github.com/julianscunha
 MIT License
 #>
 
+[CmdletBinding()]
 param(
     [int]$relaunched = 0,
     [string]$VBRServer = "localhost",
@@ -83,8 +84,9 @@ param(
     [switch]$SkipVersionPrompt
 )
 
-$ScriptVersion = "v0.1.1"
+$ScriptVersion = "v0.1.2"
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $ConfirmPreference = 'None'
@@ -1232,7 +1234,7 @@ else {
         "$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)"
     ) | ForEach-Object { $_.ToLower() }
 
-    $normalizedServer = ($VBRServer ?? "").Trim().ToLower()
+    $normalizedServer = (("" + $VBRServer).Trim().ToLower())
     $isLocal = $localNames -contains $normalizedServer -or
                 $normalizedServer -eq ([System.Net.Dns]::GetHostName().ToLower())
 
